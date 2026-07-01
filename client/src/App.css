@@ -35,6 +35,14 @@ body {
   height: 100vh;
 }
 
+/* Global Input Placeholders styling */
+::placeholder,
+textarea::placeholder,
+input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
 #root {
   height: 100vh;
 }
@@ -299,6 +307,12 @@ body {
   border-radius: var(--radius-sm);
   padding: 4px 12px;
   width: 240px;
+  transition: var(--transition);
+}
+
+.search-box:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
 }
 
 .search-box input {
@@ -334,6 +348,7 @@ body {
 
 .card-editor:focus-within {
   border-color: var(--primary-color);
+  box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.15);
 }
 
 .card-editor textarea {
@@ -345,6 +360,7 @@ body {
   font-size: 15px;
   color: var(--text-main);
   font-family: inherit;
+  background: transparent;
 }
 
 .editor-footer {
@@ -652,6 +668,7 @@ body {
 
 .agent-input-area input:focus {
   border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
 }
 
 .agent-send-btn {
@@ -872,6 +889,7 @@ body {
 
 .add-tag-box input:focus {
   border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.15);
 }
 
 .add-tag-box button {
