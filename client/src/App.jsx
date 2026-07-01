@@ -205,6 +205,10 @@ export default function App() {
         activeTag={activeTag} 
         setActiveTag={setActiveTag} 
         noteCount={notes.length}
+        onRefreshData={() => {
+          fetchNotes();
+          fetchStats();
+        }}
       />
 
       {/* 2. Middle Notes Feed */}

@@ -78,6 +78,14 @@ export default function (pi: ExtensionAPI) {
         const targetIds = extractLinks(content);
         updateNoteLinks(db, newId, targetIds);
         
+        // Sync tags with tags table
+        if (tags.length > 0) {
+          const insertTagStmt = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+          for (const tag of tags) {
+            insertTagStmt.run(tag);
+          }
+        }
+        
         db.close();
         
         return {
@@ -122,6 +130,14 @@ export default function (pi: ExtensionAPI) {
         // Update links inside the card
         const targetIds = extractLinks(content);
         updateNoteLinks(db, id, targetIds);
+        
+        // Sync tags with tags table
+        if (tags.length > 0) {
+          const insertTagStmt = db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+          for (const tag of tags) {
+            insertTagStmt.run(tag);
+          }
+        }
         
         db.close();
         

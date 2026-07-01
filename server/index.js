@@ -149,6 +149,12 @@ app.post('/api/notes', (req, res) => {
     const targetIds = extractLinks(content);
     updateNoteLinks(newId, targetIds);
     
+    // Sync tags with tags table
+    if (tags.length > 0) {
+      const insertTagStmt = db.query('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+      tags.forEach(tag => insertTagStmt.run(tag));
+    }
+    
     const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(newId).map(r => r.target_id);
 
     // Return created note
@@ -192,6 +198,12 @@ app.put('/api/notes/:id', (req, res) => {
     const targetIds = extractLinks(content);
     updateNoteLinks(Number(id), targetIds);
     
+    // Sync tags with tags table
+    if (tags.length > 0) {
+      const insertTagStmt = db.query('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+      tags.forEach(tag => insertTagStmt.run(tag));
+    }
+    
     const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(Number(id)).map(r => r.target_id);
     const finalBacklinks = db.query('SELECT source_id FROM note_links WHERE target_id = ?').all(Number(id)).map(r => r.source_id);
 
@@ -223,6 +235,139 @@ app.delete('/api/notes/:id', (req, res) => {
   }
 });
 
+// ==================== TAG MANAGEMENT ENDPOINTS ====================
+
+// 6. Get all tags with their counts
+app.get('/api/tags', (req, res) => {
+  try {
+    const allTags = db.query('SELECT name FROM tags ORDER BY name ASC').all();
+    
+    // Count frequencies from notes
+    const notes = db.query('SELECT tags FROM notes').all();
+    const tagCounts = {};
+    notes.forEach(note => {
+      if (note.tags) {
+        try {
+          const parsed = JSON.parse(note.tags);
+          parsed.forEach(t => {
+            tagCounts[t] = (tagCounts[t] || 0) + 1;
+          });
+        } catch (_) {}
+      }
+    });
+    
+    const result = allTags.map(t => ({
+      name: t.name,
+      count: tagCounts[t.name] || 0
+    }));
+    
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Create a new tag
+app.post('/api/tags', (req, res) => {
+  let { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'Tag name is required' });
+  name = name.trim().replace(/^#/, '');
+  if (!name) return res.status(400).json({ error: 'Invalid tag name' });
+  
+  try {
+    db.query('INSERT OR IGNORE INTO tags (name) VALUES (?)').run(name);
+    res.status(201).json({ name, count: 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. Rename a tag globally in all cards
+app.put('/api/tags/:name', (req, res) => {
+  const { name } = req.params;
+  let { newName } = req.body;
+  if (!newName) return res.status(400).json({ error: 'New name is required' });
+  newName = newName.trim().replace(/^#/, '');
+  if (!newName) return res.status(400).json({ error: 'Invalid new name' });
+
+  if (name === newName) {
+    return res.json({ success: true, message: 'Tag name unchanged' });
+  }
+
+  try {
+    // 1. Get all notes that contain the tag
+    const notes = db.query('SELECT id, content, tags FROM notes').all();
+    const notesToUpdate = notes.filter(n => {
+      try {
+        const parsed = JSON.parse(n.tags || '[]');
+        return parsed.includes(name);
+      } catch (_) {
+        return false;
+      }
+    });
+
+    // 2. Perform global replace of tag name inside each card's content
+    const tagRegex = new RegExp('#' + name + '(?![a-zA-Z0-9_\\u4e00-\\u9fa5-])', 'g');
+    const updateNoteStmt = db.query('UPDATE notes SET content = ?, tags = ?, updated_at = ? WHERE id = ?');
+    
+    notesToUpdate.forEach(note => {
+      const updatedContent = note.content.replace(tagRegex, '#' + newName);
+      const newTags = extractTags(updatedContent);
+      const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      updateNoteStmt.run(updatedContent, JSON.stringify(newTags), timeStr, note.id);
+    });
+
+    // 3. Update tags table
+    db.query('DELETE FROM tags WHERE name = ?').run(name);
+    db.query('INSERT OR IGNORE INTO tags (name) VALUES (?)').run(newName);
+
+    res.json({ 
+      success: true, 
+      message: `Tag renamed from #${name} to #${newName} in ${notesToUpdate.length} cards.` 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 9. Untag a tag globally (replaces #tag with tag in text content)
+app.delete('/api/tags/:name', (req, res) => {
+  const { name } = req.params;
+  try {
+    // 1. Delete tag from tags table
+    db.query('DELETE FROM tags WHERE name = ?').run(name);
+
+    // 2. Get notes containing this tag
+    const notes = db.query('SELECT id, content, tags FROM notes').all();
+    const notesToUpdate = notes.filter(n => {
+      try {
+        const parsed = JSON.parse(n.tags || '[]');
+        return parsed.includes(name);
+      } catch (_) {
+        return false;
+      }
+    });
+
+    // 3. Replace '#tag' with 'tag' in card texts, re-extract, and update
+    const tagRegex = new RegExp('#' + name + '(?![a-zA-Z0-9_\\u4e00-\\u9fa5-])', 'g');
+    const updateNoteStmt = db.query('UPDATE notes SET content = ?, tags = ?, updated_at = ? WHERE id = ?');
+
+    notesToUpdate.forEach(note => {
+      const updatedContent = note.content.replace(tagRegex, name);
+      const newTags = extractTags(updatedContent);
+      const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      updateNoteStmt.run(updatedContent, JSON.stringify(newTags), timeStr, note.id);
+    });
+
+    res.json({ 
+      success: true, 
+      message: `Tag #${name} deleted. Untagged ${notesToUpdate.length} cards.` 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 5. Get application stats (heatmap + general counts)
 app.get('/api/stats', (req, res) => {
   try {
@@ -231,9 +376,14 @@ app.get('/api/stats', (req, res) => {
     const totalNotes = countStmt.get().count;
 
     // Get unique tags and their frequency
+    const allTags = db.query('SELECT name FROM tags').all();
+    const tagCounts = {};
+    allTags.forEach(t => {
+      tagCounts[t.name] = 0;
+    });
+
     const tagsStmt = db.query('SELECT tags FROM notes');
     const allTagsRows = tagsStmt.all();
-    const tagCounts = {};
     allTagsRows.forEach(row => {
       if (row.tags) {
         try {

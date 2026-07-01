@@ -34,7 +34,39 @@ db.exec(`
     FOREIGN KEY (target_id) REFERENCES notes(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS tags (
+    name TEXT PRIMARY KEY,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
 `);
+
+// Seeding tags table from existing notes tags
+try {
+  const notes = db.query('SELECT tags FROM notes').all();
+  const allTags = new Set();
+  notes.forEach(note => {
+    if (note.tags) {
+      try {
+        const parsed = JSON.parse(note.tags);
+        parsed.forEach(t => {
+          if (t && typeof t === 'string' && t.trim() !== '') {
+            allTags.add(t.trim());
+          }
+        });
+      } catch (_) {}
+    }
+  });
+  
+  if (allTags.size > 0) {
+    const insertStmt = db.query('INSERT OR IGNORE INTO tags (name) VALUES (?)');
+    allTags.forEach(tag => {
+      insertStmt.run(tag);
+    });
+    console.log(`[Database] Migrated and seeded ${allTags.size} tags into tags table.`);
+  }
+} catch (e) {
+  console.error('[Database Migration] Seeding tags failed:', e.message);
+}
 
 console.log(`[Database] Initialized SQLite database at: ${dbPath}`);
 
