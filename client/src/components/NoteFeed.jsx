@@ -14,8 +14,85 @@ export default function NoteFeed({
   const [editingId, setEditingId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
   
+  // Linker states
+  const [showLinker, setShowLinker] = useState(false);
+  const [linkerSearch, setLinkerSearch] = useState('');
+  const [linkerTriggerIdx, setLinkerTriggerIdx] = useState(-1);
+  const [selectedLinkerIndex, setSelectedLinkerIndex] = useState(0);
+  
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Close suggestions on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showLinker && !e.target.closest('.card-linker-dropdown') && !e.target.closest('.card-editor textarea')) {
+        setShowLinker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showLinker]);
+
+  const insertCardLink = (targetId) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    
+    const value = textarea.value;
+    const before = value.slice(0, linkerTriggerIdx);
+    const after = value.slice(textarea.selectionEnd);
+    
+    const linkString = `[[${targetId}]] `;
+    const newValue = before + linkString + after;
+    
+    setNewContent(newValue);
+    setShowLinker(false);
+    setLinkerSearch('');
+    
+    // Focus back and place cursor after [[ID]]
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = linkerTriggerIdx + linkString.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  const handleTextareaChange = (e) => {
+    const value = e.target.value;
+    setNewContent(value);
+
+    const cursorIdx = e.target.selectionStart;
+    const textBeforeCursor = value.slice(0, cursorIdx);
+    
+    // Find the last index of "[[" before the cursor
+    const lastDoubleBracketIdx = textBeforeCursor.lastIndexOf('[[');
+    
+    if (lastDoubleBracketIdx !== -1) {
+      const queryPart = textBeforeCursor.slice(lastDoubleBracketIdx + 2);
+      const hasSpace = /\s/.test(queryPart);
+      const isClosed = queryPart.includes(']]');
+      
+      if (!hasSpace && !isClosed) {
+        setShowLinker(true);
+        setLinkerSearch(queryPart);
+        setLinkerTriggerIdx(lastDoubleBracketIdx);
+        setSelectedLinkerIndex(0);
+      } else {
+        setShowLinker(false);
+      }
+    } else {
+      setShowLinker(false);
+    }
+  };
+
+  const linkerSuggestions = showLinker ? notes.filter(note => {
+    const search = linkerSearch.toLowerCase();
+    return (
+      note.id.toString().includes(search) ||
+      note.content.toLowerCase().includes(search) ||
+      note.tags.some(tag => tag.toLowerCase().includes(search))
+    );
+  }).slice(0, 5) : [];
 
   const handleImageUploadClick = () => {
     fileInputRef.current?.click();
@@ -275,17 +352,53 @@ export default function NoteFeed({
         {/* Editor Box */}
         {!activeTag && (
           <form className="card-editor" onSubmit={handleCreate}>
-            <textarea
-              ref={textareaRef}
-              placeholder="在这里记录你的想法... 支持使用 #标签，以及 **加粗** 和 - 列表列表"
-              value={newContent}
-              onChange={(e) => setNewContent(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  handleCreate(e);
-                }
-              }}
-            />
+            <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column' }}>
+              <textarea
+                ref={textareaRef}
+                placeholder="在这里记录你的想法... 输入 [[ 可关联卡片，支持 #标签，**加粗**"
+                value={newContent}
+                onChange={handleTextareaChange}
+                onKeyDown={(e) => {
+                  if (showLinker && linkerSuggestions.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setSelectedLinkerIndex((prev) => (prev + 1) % linkerSuggestions.length);
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setSelectedLinkerIndex((prev) => (prev - 1 + linkerSuggestions.length) % linkerSuggestions.length);
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      insertCardLink(linkerSuggestions[selectedLinkerIndex].id);
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setShowLinker(false);
+                    }
+                  } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    handleCreate(e);
+                  }
+                }}
+              />
+              
+              {showLinker && linkerSuggestions.length > 0 && (
+                <div className="card-linker-dropdown">
+                  {linkerSuggestions.map((suggestion, index) => {
+                    const previewText = suggestion.content.length > 40
+                      ? suggestion.content.slice(0, 40) + '...'
+                      : suggestion.content;
+                    return (
+                      <div
+                        key={suggestion.id}
+                        className={`linker-suggestion-item ${index === selectedLinkerIndex ? 'active' : ''}`}
+                        onClick={() => insertCardLink(suggestion.id)}
+                      >
+                        <span className="linker-id-badge">#ID: {suggestion.id}</span>
+                        <span className="linker-text-preview">{previewText}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <div className="editor-footer">
               <div className="editor-toolbar">
                 <button type="button" className="toolbar-btn" title="插入标签" onClick={() => insertText('#')}>

@@ -719,3 +719,69 @@ body {
     box-shadow: 0 0 0 rgba(16, 185, 129, 0);
   }
 }
+
+/* Card Linker Dropdown Autocomplete */
+.card-linker-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.linker-suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-main);
+  transition: background-color 0.15s ease, color 0.15s ease;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.linker-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.linker-suggestion-item.active,
+.linker-suggestion-item:hover {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.linker-suggestion-item.active .linker-id-badge,
+.linker-suggestion-item:hover .linker-id-badge {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.linker-id-badge {
+  background-color: rgba(16, 185, 129, 0.08);
+  color: var(--primary-color);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-weight: 600;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.linker-text-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
