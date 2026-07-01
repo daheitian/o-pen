@@ -680,6 +680,55 @@ input::placeholder {
   transform: translateY(-1px);
 }
 
+.agent-context-area {
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+}
+
+.agent-context-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.agent-context-header button,
+.agent-context-chip button {
+  border: none;
+  background: none;
+  color: var(--text-light);
+  cursor: pointer;
+}
+
+.agent-context-header button:hover,
+.agent-context-chip button:hover {
+  color: #ef4444;
+}
+
+.agent-context-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  background-color: rgba(var(--primary-rgb), 0.1);
+  border: 1px solid rgba(var(--primary-rgb), 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--primary-hover);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
 .agent-input-area {
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
@@ -1125,6 +1174,10 @@ input::placeholder {
   min-width: 130px;
   z-index: 300;
   animation: context-menu-fade 0.1s ease-out;
+}
+
+.note-context-menu {
+  min-width: 160px;
 }
 
 @keyframes context-menu-fade {

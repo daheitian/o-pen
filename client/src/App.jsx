@@ -13,6 +13,7 @@ export default function App() {
   const [activeTag, setActiveTag] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [agentContextNotes, setAgentContextNotes] = useState([]);
 
   // Resize sidebars
   const [leftWidth, setLeftWidth] = useState(260);
@@ -101,6 +102,30 @@ export default function App() {
     }
   };
 
+  const applyNoteChanges = ({ notes: changedNotes = [], deletedIds = [] }) => {
+    const deleted = new Set(deletedIds);
+    const changedMap = new Map(changedNotes.map(note => [note.id, note]));
+
+    setNotes(prev => {
+      const byId = new Map(
+        prev
+          .filter(note => !deleted.has(note.id))
+          .map(note => [note.id, note])
+      );
+
+      changedNotes.forEach(note => byId.set(note.id, note));
+
+      return [...byId.values()].sort((a, b) => (
+        (b.created_at || '').localeCompare(a.created_at || '')
+      ));
+    });
+
+    setAgentContextNotes(prev => prev
+      .filter(note => !deleted.has(note.id))
+      .map(note => changedMap.get(note.id) || note)
+    );
+  };
+
   // Add a new note
   const handleAddNote = async (content) => {
     try {
@@ -127,6 +152,9 @@ export default function App() {
         body: JSON.stringify({ content }),
       });
       if (res.ok) {
+        setAgentContextNotes(prev => prev.map(note => (
+          note.id === id ? { ...note, content } : note
+        )));
         await fetchNotes();
         await fetchStats();
       }
@@ -143,6 +171,7 @@ export default function App() {
         method: 'DELETE',
       });
       if (res.ok) {
+        setAgentContextNotes(prev => prev.filter(note => note.id !== id));
         await fetchNotes();
         await fetchStats();
       }
@@ -152,7 +181,7 @@ export default function App() {
   };
 
   // Send message to AI Agent and read SSE stream
-  const handleSendMessage = async (messageText) => {
+  const handleSendMessage = async (messageText, contextNotes = agentContextNotes) => {
     if (!messageText.trim()) return;
 
     // Display user message instantly
@@ -166,7 +195,10 @@ export default function App() {
       const response = await fetch(`${API_BASE}/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: messageText }),
+        body: JSON.stringify({
+          message: messageText,
+          contextNotes
+        }),
       });
 
       if (!response.body) {
@@ -213,6 +245,8 @@ export default function App() {
                   };
                   return updated;
                 });
+              } else if (data.type === 'notes_changed') {
+                applyNoteChanges(data);
               }
             } catch (e) {
               // Ignore partial JSON parsing errors that sometimes happen at chunk boundaries
@@ -247,6 +281,34 @@ export default function App() {
     }
   };
 
+  const handleMentionNote = (note) => {
+    setAgentContextNotes(prev => (
+      prev.some(item => item.id === note.id)
+        ? prev
+        : [...prev, {
+            id: note.id,
+            content: note.content,
+            created_at: note.created_at
+          }]
+    ));
+  };
+
+  const handleAiAddTags = (note) => {
+    if (isThinking) {
+      alert('Pi Agent 正在思考中，请稍后再执行。');
+      return;
+    }
+
+    handleSendMessage(
+      `请直接为当前上下文卡片添加合适标签，无需确认。只调用 update_note 更新卡片 ID ${note.id}；保留原文和已有 #标签，只追加缺失的 2 到 5 个 #标签。`,
+      [note]
+    );
+  };
+
+  const handleRemoveContextNote = (id) => {
+    setAgentContextNotes(prev => prev.filter(note => note.id !== id));
+  };
+
   return (
     <div 
       className="app-container"
@@ -277,6 +339,8 @@ export default function App() {
         onAddNote={handleAddNote}
         onUpdateNote={handleUpdateNote}
         onDeleteNote={handleDeleteNote}
+        onMentionNote={handleMentionNote}
+        onAiAddTags={handleAiAddTags}
       />
 
       {/* Right Resizer */}
@@ -286,8 +350,11 @@ export default function App() {
       <AgentPanel 
         messages={messages}
         isThinking={isThinking}
+        contextNotes={agentContextNotes}
         onSendMessage={handleSendMessage}
         onClearHistory={handleClearHistory}
+        onRemoveContextNote={handleRemoveContextNote}
+        onClearContextNotes={() => setAgentContextNotes([])}
       />
     </div>
   );

@@ -11,9 +11,64 @@ const __dirname = path.dirname(__filename);
 // Path to the pi-minimax wrapper script in ~/.pi/agent/bin/pi-minimax
 const homeDir = os.homedir();
 const piMinimaxPath = path.join(homeDir, '.pi/agent/bin/pi-minimax');
+const piRuntimeBin = path.join(homeDir, '.vite-plus/js_runtime/node/24.16.0/bin');
+
+function parseTags(tags) {
+  if (!tags) return [];
+  try {
+    return JSON.parse(tags);
+  } catch (_) {
+    return [];
+  }
+}
+
+function getNotesForSync() {
+  const notes = db.query('SELECT * FROM notes ORDER BY created_at DESC').all();
+  const allLinks = db.query('SELECT source_id, target_id FROM note_links').all();
+  const linksMap = {};
+  const backlinksMap = {};
+
+  allLinks.forEach(({ source_id, target_id }) => {
+    if (!linksMap[source_id]) linksMap[source_id] = [];
+    linksMap[source_id].push(target_id);
+
+    if (!backlinksMap[target_id]) backlinksMap[target_id] = [];
+    backlinksMap[target_id].push(source_id);
+  });
+
+  return notes.map(note => ({
+    ...note,
+    tags: parseTags(note.tags),
+    links: linksMap[note.id] || [],
+    backlinks: backlinksMap[note.id] || []
+  }));
+}
+
+function noteFingerprint(note) {
+  return JSON.stringify([
+    note.content,
+    note.tags,
+    note.created_at,
+    note.updated_at,
+    note.links,
+    note.backlinks
+  ]);
+}
+
+function diffNotes(beforeNotes, afterNotes) {
+  const beforeMap = new Map(beforeNotes.map(note => [note.id, noteFingerprint(note)]));
+  const afterMap = new Map(afterNotes.map(note => [note.id, note]));
+
+  return {
+    notes: afterNotes.filter(note => beforeMap.get(note.id) !== noteFingerprint(note)),
+    deletedIds: beforeNotes
+      .filter(note => !afterMap.has(note.id))
+      .map(note => note.id)
+  };
+}
 
 export async function handleAgentChat(req, res) {
-  const { message, conversationId = 'default_chat' } = req.body;
+  const { message, conversationId = 'default_chat', contextNotes = [] } = req.body;
   if (!message) {
     return res.status(400).json({ error: 'Message is required' });
   }
@@ -33,6 +88,14 @@ export async function handleAgentChat(req, res) {
     // Send initialization event
     res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`);
 
+    const notesBeforeAgent = getNotesForSync();
+
+    const noteContextText = Array.isArray(contextNotes) && contextNotes.length > 0
+      ? `\n用户手动加入的上下文卡片：\n${contextNotes.map(note => (
+          `[卡片 ID: ${note.id}]${note.created_at ? ` (${note.created_at})` : ''}\n${note.content}`
+        )).join('\n\n---\n\n')}\n`
+      : '';
+
     // 3. Compile prompt for Pi Agent with instructions on tools instead of full DB dump
     const finalPrompt = `你是一个卡片笔记助手 Pi Agent。
 你的任务是协助用户整理、搜索、建立和修改本地卡片笔记。
@@ -50,6 +113,7 @@ export async function handleAgentChat(req, res) {
 3. 如果用户只是进行日常闲聊（如说“你好”、“谢谢”），直接友好互动即可，无需调用工具。
 4. 保持回答简洁明了，用词亲切，使用中文回答。
 
+${noteContextText}
 用户问题：${message}`;
 
     console.log(`[Bridge] Spawning Pi Agent executable at: ${piMinimaxPath}`);
@@ -67,13 +131,27 @@ export async function handleAgentChat(req, res) {
     ], {
       env: {
         ...process.env,
-        HOME: homeDir
+        HOME: homeDir,
+        PATH: fs.existsSync(piRuntimeBin)
+          ? `${piRuntimeBin}:${process.env.PATH || ''}`
+          : process.env.PATH
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
     let fullResponse = '';
     let errorOutput = '';
+
+    const emitNoteChanges = () => {
+      try {
+        const changes = diffNotes(notesBeforeAgent, getNotesForSync());
+        if (changes.notes.length > 0 || changes.deletedIds.length > 0) {
+          res.write(`data: ${JSON.stringify({ type: 'notes_changed', ...changes })}\n\n`);
+        }
+      } catch (err) {
+        console.error('[Bridge] Failed to diff note changes:', err);
+      }
+    };
 
     // Handle stdout chunks (streaming output from the agent)
     pyProcess.stdout.on('data', (data) => {
@@ -90,6 +168,8 @@ export async function handleAgentChat(req, res) {
 
     // Process finished
     pyProcess.on('close', (code) => {
+      emitNoteChanges();
+
       if (code !== 0) {
         console.error(`[Bridge] Pi Agent exited with code ${code}. Error: ${errorOutput}`);
         res.write(`data: ${JSON.stringify({ type: 'error', error: errorOutput || 'Agent failed to respond.' })}\n\n`);

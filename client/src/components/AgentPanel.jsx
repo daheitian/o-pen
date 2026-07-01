@@ -10,8 +10,11 @@ marked.setOptions({
 export default function AgentPanel({ 
   messages, 
   isThinking, 
+  contextNotes = [],
   onSendMessage, 
-  onClearHistory 
+  onClearHistory,
+  onRemoveContextNote,
+  onClearContextNotes
 }) {
   const [input, setInput] = useState('');
   const chatEndRef = useRef(null);
@@ -159,6 +162,30 @@ export default function AgentPanel({
           ))}
         </div>
       </div>
+
+      {contextNotes.length > 0 && (
+        <div className="agent-context-area">
+          <div className="agent-context-header">
+            <span>上下文</span>
+            <button type="button" onClick={onClearContextNotes} disabled={isThinking}>清空</button>
+          </div>
+          <div className="agent-context-list">
+            {contextNotes.map(note => (
+              <span key={note.id} className="agent-context-chip" title={note.content}>
+                <span>卡片 #{note.id.slice(0, 8)}</span>
+                <button
+                  type="button"
+                  title="移除上下文"
+                  onClick={() => onRemoveContextNote(note.id)}
+                  disabled={isThinking}
+                >
+                  x
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Input Form */}
       <form className="agent-input-area" onSubmit={handleSubmit}>

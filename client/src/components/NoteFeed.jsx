@@ -8,11 +8,14 @@ export default function NoteFeed({
   setSearchQuery, 
   onAddNote, 
   onUpdateNote, 
-  onDeleteNote 
+  onDeleteNote,
+  onMentionNote,
+  onAiAddTags
 }) {
   const [newContent, setNewContent] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
+  const [noteContextMenu, setNoteContextMenu] = useState(null);
   
   // Linker states
   const [showLinker, setShowLinker] = useState(false);
@@ -33,6 +36,20 @@ export default function NoteFeed({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showLinker]);
+
+  useEffect(() => {
+    const closeMenu = () => setNoteContextMenu(null);
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') closeMenu();
+    };
+
+    window.addEventListener('click', closeMenu);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', closeMenu);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const insertCardLink = (targetId) => {
     const textarea = textareaRef.current;
@@ -159,6 +176,15 @@ export default function NoteFeed({
   const handleStartEdit = (note) => {
     setEditingId(note.id);
     setEditingContent(note.content);
+  };
+
+  const handleNoteContextMenu = (e, note) => {
+    e.preventDefault();
+    setNoteContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      note
+    });
   };
 
   const handleSaveEdit = (id) => {
@@ -436,7 +462,12 @@ export default function NoteFeed({
             </div>
           ) : (
             filteredNotes.map(note => (
-              <div key={note.id} id={`note-card-${note.id}`} className="note-card">
+              <div
+                key={note.id}
+                id={`note-card-${note.id}`}
+                className="note-card"
+                onContextMenu={(e) => handleNoteContextMenu(e, note)}
+              >
                 {editingId === note.id ? (
                   /* Editing Mode */
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -466,22 +497,6 @@ export default function NoteFeed({
                   <>
                     <div className="card-header">
                       <span className="card-time">{note.created_at}</span>
-                      <div className="card-actions">
-                        <span 
-                          className="action-icon" 
-                          title="编辑笔记"
-                          onClick={() => handleStartEdit(note)}
-                        >
-                          ✏️
-                        </span>
-                        <span 
-                          className="action-icon delete-icon" 
-                          title="删除笔记"
-                          onClick={() => onDeleteNote(note.id)}
-                        >
-                          🗑️
-                        </span>
-                      </div>
                     </div>
                     <div className="card-body">
                       {renderFormattedText(note.content)}
@@ -558,6 +573,52 @@ export default function NoteFeed({
             ))
           )}
         </div>
+
+        {noteContextMenu && (
+          <div
+            className="tag-context-menu note-context-menu"
+            style={{ top: `${noteContextMenu.y}px`, left: `${noteContextMenu.x}px` }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                handleStartEdit(noteContextMenu.note);
+                setNoteContextMenu(null);
+              }}
+            >
+              ✏️ 编辑卡片
+            </div>
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                onMentionNote(noteContextMenu.note);
+                setNoteContextMenu(null);
+              }}
+            >
+              @ 加入助手上下文
+            </div>
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                onAiAddTags(noteContextMenu.note);
+                setNoteContextMenu(null);
+              }}
+            >
+              AI添加标签
+            </div>
+            <div
+              className="context-menu-item delete"
+              onClick={() => {
+                onDeleteNote(noteContextMenu.note.id);
+                setNoteContextMenu(null);
+              }}
+            >
+              🗑️ 删除卡片
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
