@@ -89,6 +89,55 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
     }
   };
 
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState(null);
+
+  const handleContextMenu = (e, tagName) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      tagName
+    });
+  };
+
+  useEffect(() => {
+    const handleCloseMenu = () => {
+      if (contextMenu) setContextMenu(null);
+    };
+    window.addEventListener('click', handleCloseMenu);
+    return () => window.removeEventListener('click', handleCloseMenu);
+  }, [contextMenu]);
+
+  const handleContextRename = (tagName) => {
+    const newName = window.prompt(`重命名标签 #${tagName} 为：`, tagName);
+    if (newName && newName.trim() && newName.trim() !== tagName) {
+      handleRenameTagDirectly(tagName, newName.trim());
+    }
+  };
+
+  const handleRenameTagDirectly = async (oldName, newName) => {
+    const trimmed = newName.replace(/^#/, '');
+    try {
+      const res = await fetch(`http://localhost:5005/api/tags/${oldName}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newName: trimmed })
+      });
+      if (res.ok) {
+        if (onRefreshData) onRefreshData();
+      }
+    } catch (err) {
+      console.error('[Sidebar] Context rename tag failed:', err);
+    }
+  };
+
+  const handleContextCopy = (tagName) => {
+    navigator.clipboard.writeText(`#${tagName}`).catch(err => {
+      console.error('[Sidebar] Copy failed:', err);
+    });
+  };
+
   // Generate date cells for the contribution heatmap (past 12 weeks = 84 days)
   const renderHeatmap = () => {
     const cells = [];
@@ -216,6 +265,7 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
               key={tag}
               className={`tag-badge ${activeTag === tag ? 'active' : ''}`}
               onClick={() => setActiveTag(tag === activeTag ? null : tag)}
+              onContextMenu={(e) => handleContextMenu(e, tag)}
               style={{
                 backgroundColor: activeTag === tag ? 'var(--primary-color)' : '',
                 color: activeTag === tag ? 'white' : ''
@@ -294,6 +344,33 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
                 ))
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tag Badge Context Menu */}
+      {contextMenu && (
+        <div 
+          className="tag-context-menu" 
+          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+        >
+          <div 
+            className="context-menu-item"
+            onClick={() => handleContextRename(contextMenu.tagName)}
+          >
+            ✏️ 重命名标签
+          </div>
+          <div 
+            className="context-menu-item delete"
+            onClick={() => handleDeleteTag(contextMenu.tagName)}
+          >
+            🗑️ 删除标签
+          </div>
+          <div 
+            className="context-menu-item"
+            onClick={() => handleContextCopy(contextMenu.tagName)}
+          >
+            📋 复制标签名
           </div>
         </div>
       )}
