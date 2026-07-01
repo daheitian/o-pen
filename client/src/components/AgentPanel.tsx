@@ -1,11 +1,23 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import type { FormEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { marked } from 'marked';
+import type { ChatMessage, Note } from '../types';
 
 // Configure marked options
 marked.setOptions({
   gfm: true,
   breaks: true
 });
+
+type AgentPanelProps = {
+  messages: ChatMessage[];
+  isThinking: boolean;
+  contextNotes?: Note[];
+  onSendMessage: (messageText: string) => void;
+  onClearHistory: () => void;
+  onRemoveContextNote: (id: string) => void;
+  onClearContextNotes: () => void;
+};
 
 export default function AgentPanel({ 
   messages, 
@@ -15,29 +27,29 @@ export default function AgentPanel({
   onClearHistory,
   onRemoveContextNote,
   onClearContextNotes
-}) {
+}: AgentPanelProps) {
   const [input, setInput] = useState('');
-  const chatEndRef = useRef(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   // Auto-scroll to bottom of chat when messages change or agent is thinking
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isThinking]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!input.trim() || isThinking) return;
     onSendMessage(input);
     setInput('');
   };
 
-  const handleSuggestionClick = (suggestionText) => {
+  const handleSuggestionClick = (suggestionText: string) => {
     if (isThinking) return;
     onSendMessage(suggestionText);
   };
 
-  const handleChatClick = (e) => {
-    const target = e.target.closest('.chat-card-link');
+  const handleChatClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    const target = (e.target as Element).closest('.chat-card-link');
     if (target) {
       const cardId = target.getAttribute('data-id');
       if (cardId) {
@@ -54,14 +66,14 @@ export default function AgentPanel({
   };
 
   // Render markdown in chat bubble using marked
-  const formatAgentResponse = (text) => {
+  const formatAgentResponse = (text: string) => {
     if (!text) return '';
     
     // Parse double bracket card links [[ID]]
     const processedText = text.replace(/\[\[(\d+)\]\]/g, '<span class="chat-card-link" data-id="$1">🔗 卡片 #$1</span>');
     
     // Parse markdown to HTML safely (marked parses standard markdown format)
-    const html = marked.parse(processedText);
+    const html = marked.parse(processedText) as string;
     return (
       <div 
         className="markdown-body"

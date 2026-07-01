@@ -1,30 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import Sidebar from './components/Sidebar';
 import NoteFeed from './components/NoteFeed';
 import AgentPanel from './components/AgentPanel';
+import ConfirmDeleteDialog from './components/ConfirmDeleteDialog';
+import type { ChatMessage, Note, NoteChanges, Stats } from './types';
 import './App.css';
 
 const API_BASE = 'http://localhost:5005/api';
 
 export default function App() {
-  const [notes, setNotes] = useState([]);
-  const [stats, setStats] = useState({ totalNotes: 0, totalTags: 0, tagFrequency: {}, heatmap: [] });
-  const [messages, setMessages] = useState([]);
-  const [activeTag, setActiveTag] = useState(null);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [stats, setStats] = useState<Stats>({ totalNotes: 0, totalTags: 0, tagFrequency: {}, heatmap: [] });
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isThinking, setIsThinking] = useState(false);
-  const [agentContextNotes, setAgentContextNotes] = useState([]);
+  const [agentContextNotes, setAgentContextNotes] = useState<Note[]>([]);
+  const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
 
   // Resize sidebars
   const [leftWidth, setLeftWidth] = useState(260);
   const [rightWidth, setRightWidth] = useState(360);
 
-  const handleLeftMouseDown = (e) => {
+  const handleLeftMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = leftWidth;
 
-    const handleMouseMove = (moveEvent) => {
+    const handleMouseMove = (moveEvent: MouseEvent) => {
       const newWidth = Math.max(180, Math.min(450, startWidth + (moveEvent.clientX - startX)));
       setLeftWidth(newWidth);
     };
@@ -42,12 +46,12 @@ export default function App() {
     document.body.style.userSelect = 'none';
   };
 
-  const handleRightMouseDown = (e) => {
+  const handleRightMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = rightWidth;
 
-    const handleMouseMove = (moveEvent) => {
+    const handleMouseMove = (moveEvent: MouseEvent) => {
       const newWidth = Math.max(280, Math.min(600, startWidth - (moveEvent.clientX - startX)));
       setRightWidth(newWidth);
     };
@@ -75,7 +79,7 @@ export default function App() {
   const fetchNotes = async () => {
     try {
       const res = await fetch(`${API_BASE}/notes`);
-      const data = await res.json();
+      const data = await res.json() as Note[];
       setNotes(data);
     } catch (err) {
       console.error('Failed to fetch notes:', err);
@@ -85,7 +89,7 @@ export default function App() {
   const fetchStats = async () => {
     try {
       const res = await fetch(`${API_BASE}/stats`);
-      const data = await res.json();
+      const data = await res.json() as Stats;
       setStats(data);
     } catch (err) {
       console.error('Failed to fetch stats:', err);
@@ -95,14 +99,14 @@ export default function App() {
   const fetchChatHistory = async () => {
     try {
       const res = await fetch(`${API_BASE}/agent/history`);
-      const data = await res.json();
+      const data = await res.json() as ChatMessage[];
       setMessages(data);
     } catch (err) {
       console.error('Failed to fetch chat history:', err);
     }
   };
 
-  const applyNoteChanges = ({ notes: changedNotes = [], deletedIds = [] }) => {
+  const applyNoteChanges = ({ notes: changedNotes = [], deletedIds = [] }: NoteChanges) => {
     const deleted = new Set(deletedIds);
     const changedMap = new Map(changedNotes.map(note => [note.id, note]));
 
@@ -127,7 +131,7 @@ export default function App() {
   };
 
   // Add a new note
-  const handleAddNote = async (content) => {
+  const handleAddNote = async (content: string) => {
     try {
       const res = await fetch(`${API_BASE}/notes`, {
         method: 'POST',
@@ -144,7 +148,7 @@ export default function App() {
   };
 
   // Update a note
-  const handleUpdateNote = async (id, content) => {
+  const handleUpdateNote = async (id: string, content: string) => {
     try {
       const res = await fetch(`${API_BASE}/notes/${id}`, {
         method: 'PUT',
@@ -164,8 +168,7 @@ export default function App() {
   };
 
   // Delete a note
-  const handleDeleteNote = async (id) => {
-    if (!window.confirm('确定要删除这条笔记吗？')) return;
+  const handleDeleteNote = async (id: string) => {
     try {
       const res = await fetch(`${API_BASE}/notes/${id}`, {
         method: 'DELETE',
@@ -181,7 +184,7 @@ export default function App() {
   };
 
   // Send message to AI Agent and read SSE stream
-  const handleSendMessage = async (messageText, contextNotes = agentContextNotes) => {
+  const handleSendMessage = async (messageText: string, contextNotes = agentContextNotes) => {
     if (!messageText.trim()) return;
 
     // Display user message instantly
@@ -248,7 +251,7 @@ export default function App() {
               } else if (data.type === 'notes_changed') {
                 applyNoteChanges(data);
               }
-            } catch (e) {
+            } catch {
               // Ignore partial JSON parsing errors that sometimes happen at chunk boundaries
             }
           }
@@ -258,7 +261,7 @@ export default function App() {
       console.error('Agent chat failed:', err);
       setMessages(prev => [
         ...prev,
-        { role: 'model', content: `[连接助手失败]: ${err.message}`, created_at: `2026-07-01 ${userTime}` }
+        { role: 'model', content: `[连接助手失败]: ${err instanceof Error ? err.message : String(err)}`, created_at: `2026-07-01 ${userTime}` }
       ]);
     } finally {
       setIsThinking(false);
@@ -267,8 +270,11 @@ export default function App() {
     }
   };
 
-  const handleClearHistory = async () => {
-    if (!window.confirm('确定要清除聊天记录吗？这也会重置智能体的短期记忆。')) return;
+  const handleClearHistory = () => {
+    setShowClearHistoryConfirm(true);
+  };
+
+  const confirmClearHistory = async () => {
     try {
       const res = await fetch(`${API_BASE}/agent/clear`, {
         method: 'POST',
@@ -281,19 +287,15 @@ export default function App() {
     }
   };
 
-  const handleMentionNote = (note) => {
+  const handleMentionNote = (note: Note) => {
     setAgentContextNotes(prev => (
       prev.some(item => item.id === note.id)
         ? prev
-        : [...prev, {
-            id: note.id,
-            content: note.content,
-            created_at: note.created_at
-          }]
+        : [...prev, note]
     ));
   };
 
-  const handleAiAddTags = (note) => {
+  const handleAiAddTags = (note: Note) => {
     if (isThinking) {
       alert('Pi Agent 正在思考中，请稍后再执行。');
       return;
@@ -305,7 +307,7 @@ export default function App() {
     );
   };
 
-  const handleRemoveContextNote = (id) => {
+  const handleRemoveContextNote = (id: string) => {
     setAgentContextNotes(prev => prev.filter(note => note.id !== id));
   };
 
@@ -356,6 +358,18 @@ export default function App() {
         onRemoveContextNote={handleRemoveContextNote}
         onClearContextNotes={() => setAgentContextNotes([])}
       />
+      {showClearHistoryConfirm && (
+        <ConfirmDeleteDialog
+          title="清除聊天记录？"
+          description="这也会重置智能体的短期记忆。"
+          confirmLabel="清除"
+          onCancel={() => setShowClearHistoryConfirm(false)}
+          onConfirm={() => {
+            setShowClearHistoryConfirm(false);
+            void confirmClearHistory();
+          }}
+        />
+      )}
     </div>
   );
 }

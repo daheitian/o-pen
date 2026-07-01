@@ -1,4 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import ConfirmDeleteDialog from './ConfirmDeleteDialog';
+import type { Note } from '../types';
+
+type NoteFeedProps = {
+  notes: Note[];
+  activeTag: string | null;
+  setActiveTag: (tag: string | null) => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  onAddNote: (content: string) => void;
+  onUpdateNote: (id: string, content: string) => void;
+  onDeleteNote: (id: string) => void;
+  onMentionNote: (note: Note) => void;
+  onAiAddTags: (note: Note) => void;
+};
 
 export default function NoteFeed({ 
   notes, 
@@ -11,11 +27,12 @@ export default function NoteFeed({
   onDeleteNote,
   onMentionNote,
   onAiAddTags
-}) {
+}: NoteFeedProps) {
   const [newContent, setNewContent] = useState('');
-  const [editingId, setEditingId] = useState(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
-  const [noteContextMenu, setNoteContextMenu] = useState(null);
+  const [noteContextMenu, setNoteContextMenu] = useState<{ x: number; y: number; note: Note } | null>(null);
+  const [deleteTargetNote, setDeleteTargetNote] = useState<Note | null>(null);
   
   // Linker states
   const [showLinker, setShowLinker] = useState(false);
@@ -23,13 +40,14 @@ export default function NoteFeed({
   const [linkerTriggerIdx, setLinkerTriggerIdx] = useState(-1);
   const [selectedLinkerIndex, setSelectedLinkerIndex] = useState(0);
   
-  const textareaRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Close suggestions on click outside
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (showLinker && !e.target.closest('.card-linker-dropdown') && !e.target.closest('.card-editor textarea')) {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (showLinker && !target.closest('.card-linker-dropdown') && !target.closest('.card-editor textarea')) {
         setShowLinker(false);
       }
     };
@@ -39,7 +57,7 @@ export default function NoteFeed({
 
   useEffect(() => {
     const closeMenu = () => setNoteContextMenu(null);
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') closeMenu();
     };
 
@@ -51,7 +69,7 @@ export default function NoteFeed({
     };
   }, []);
 
-  const insertCardLink = (targetId) => {
+  const insertCardLink = (targetId: string) => {
     const textarea = textareaRef.current;
     if (!textarea) return;
     
@@ -74,7 +92,7 @@ export default function NoteFeed({
     }, 0);
   };
 
-  const handleTextareaChange = (e) => {
+  const handleTextareaChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setNewContent(value);
 
@@ -115,8 +133,8 @@ export default function NoteFeed({
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files[0];
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
     
     const formData = new FormData();
@@ -128,7 +146,7 @@ export default function NoteFeed({
         body: formData
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as { url: string };
         insertText(`![image](${data.url})`);
       } else {
         alert('图片上传失败，请重试。');
@@ -148,7 +166,7 @@ export default function NoteFeed({
   }, [newContent]);
 
   // Handle toolbar actions
-  const insertText = (before, after = '') => {
+  const insertText = (before: string, after = '') => {
     if (!textareaRef.current) return;
     const textarea = textareaRef.current;
     const start = textarea.selectionStart;
@@ -166,19 +184,23 @@ export default function NoteFeed({
     }, 0);
   };
 
-  const handleCreate = (e) => {
-    e.preventDefault();
+  const createNote = () => {
     if (!newContent.trim()) return;
     onAddNote(newContent);
     setNewContent('');
   };
 
-  const handleStartEdit = (note) => {
+  const handleCreate = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    createNote();
+  };
+
+  const handleStartEdit = (note: Note) => {
     setEditingId(note.id);
     setEditingContent(note.content);
   };
 
-  const handleNoteContextMenu = (e, note) => {
+  const handleNoteContextMenu = (e: ReactMouseEvent<HTMLDivElement>, note: Note) => {
     e.preventDefault();
     setNoteContextMenu({
       x: e.clientX,
@@ -187,14 +209,14 @@ export default function NoteFeed({
     });
   };
 
-  const handleSaveEdit = (id) => {
+  const handleSaveEdit = (id: string) => {
     if (!editingContent.trim()) return;
     onUpdateNote(id, editingContent);
     setEditingId(null);
     setEditingContent('');
   };
 
-  const handleCardLinkClick = (targetId) => {
+  const handleCardLinkClick = (targetId: string) => {
     const element = document.getElementById(`note-card-${targetId}`);
     if (element) {
       // 1. Smooth scroll
@@ -211,7 +233,7 @@ export default function NoteFeed({
   };
 
   // Helper to parse formatting (bold, tags, bullets, images, links, card links)
-  const renderFormattedText = (text) => {
+  const renderFormattedText = (text: string): ReactNode => {
     if (!text) return null;
     const lines = text.split('\n');
     
@@ -219,8 +241,8 @@ export default function NoteFeed({
       const isBullet = line.trim().startsWith('- ') || line.trim().startsWith('* ');
       const content = isBullet ? line.trim().substring(2) : line;
       
-      const elements = [];
-      const regex = /(\*\*.*?\*\*|#[a-zA-Z0-9_\u4e00-\u9fa5-]+|!\[.*?\]\(.*?\)|https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=/?&()]*|\[\[[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\]\])/gi;
+      const elements: ReactNode[] = [];
+      const regex = /(\*\*.*?\*\*|#[a-zA-Z0-9_\u4e00-\u9fa5-]+|!\[.*?\]\(.*?\)|https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._+~#=/?&()]*|\[\[[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\]\])/gi;
       const matches = [...content.matchAll(regex)];
       let lastIdx = 0;
 
@@ -229,7 +251,7 @@ export default function NoteFeed({
       } else {
         matches.forEach((m, matchIdx) => {
           const matchText = m[0];
-          const matchStart = m.index;
+          const matchStart = m.index ?? 0;
           
           if (matchStart > lastIdx) {
             elements.push(content.substring(lastIdx, matchStart));
@@ -384,7 +406,7 @@ export default function NoteFeed({
                 placeholder="在这里记录你的想法... 输入 [[ 可关联卡片，支持 #标签，**加粗**"
                 value={newContent}
                 onChange={handleTextareaChange}
-                onKeyDown={(e) => {
+                onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
                   if (showLinker && linkerSuggestions.length > 0) {
                     if (e.key === 'ArrowDown') {
                       e.preventDefault();
@@ -394,13 +416,15 @@ export default function NoteFeed({
                       setSelectedLinkerIndex((prev) => (prev - 1 + linkerSuggestions.length) % linkerSuggestions.length);
                     } else if (e.key === 'Enter') {
                       e.preventDefault();
-                      insertCardLink(linkerSuggestions[selectedLinkerIndex].id);
+                      const selectedSuggestion = linkerSuggestions[selectedLinkerIndex];
+                      if (selectedSuggestion) insertCardLink(selectedSuggestion.id);
                     } else if (e.key === 'Escape') {
                       e.preventDefault();
                       setShowLinker(false);
                     }
                   } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    handleCreate(e);
+                    e.preventDefault();
+                    createNote();
                   }
                 }}
               />
@@ -611,13 +635,26 @@ export default function NoteFeed({
             <div
               className="context-menu-item delete"
               onClick={() => {
-                onDeleteNote(noteContextMenu.note.id);
+                setDeleteTargetNote(noteContextMenu.note);
                 setNoteContextMenu(null);
               }}
             >
               🗑️ 删除卡片
             </div>
           </div>
+        )}
+        {deleteTargetNote && (
+          <ConfirmDeleteDialog
+            title="确认删除卡片？"
+            description="删除后无法恢复，这张卡片会从开发笔记中移除。"
+            confirmLabel="确认删除"
+            preview={deleteTargetNote.content.trim() || '空白卡片'}
+            onCancel={() => setDeleteTargetNote(null)}
+            onConfirm={() => {
+              onDeleteNote(deleteTargetNote.id);
+              setDeleteTargetNote(null);
+            }}
+          />
         )}
       </div>
     </main>
