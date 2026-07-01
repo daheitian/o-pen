@@ -91,7 +91,7 @@ export default function NoteFeed({
     setEditingContent('');
   };
 
-  // Helper to parse formatting (bold, tags, bullets, images)
+  // Helper to parse formatting (bold, tags, bullets, images, links)
   const renderFormattedText = (text) => {
     if (!text) return null;
     const lines = text.split('\n');
@@ -101,7 +101,7 @@ export default function NoteFeed({
       const content = isBullet ? line.trim().substring(2) : line;
       
       const elements = [];
-      const regex = /(\*\*.*?\*\*|#[a-zA-Z0-9_\u4e00-\u9fa5-]+|!\[.*?\]\(.*?\))/g;
+      const regex = /(\*\*.*?\*\*|#[a-zA-Z0-9_\u4e00-\u9fa5-]+|!\[.*?\]\(.*?\)|https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=/?&()]*)/g;
       const matches = [...content.matchAll(regex)];
       let lastIdx = 0;
 
@@ -154,6 +154,24 @@ export default function NoteFeed({
                 />
               );
             }
+          } else if (matchText.startsWith('http://') || matchText.startsWith('https://')) {
+            elements.push(
+              <a 
+                key={`link-${matchIdx}`} 
+                href={matchText} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="card-link"
+                style={{
+                  color: 'var(--primary-color)',
+                  textDecoration: 'underline',
+                  wordBreak: 'break-all',
+                  fontWeight: '500'
+                }}
+              >
+                {matchText}
+              </a>
+            );
           }
           lastIdx = matchStart + matchText.length;
         });
