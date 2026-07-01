@@ -1,0 +1,11 @@
+{
+  "name": "pi-mind",
+  "version": "1.0.0",
+  "description": "Pi-Mind: Card note application with better-sqlite3 and Pi Agent",
+  "scripts": {
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "dev": "npm run dev --prefix server & npm run dev --prefix client"
+  }
+}

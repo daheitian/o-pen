@@ -1,0 +1,26 @@
+# Dependency directories
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Python environment
+agent/venv/
+agent/history/
+__pycache__/
+*.pyc
+
+# Databases
+notes.db
+notes.db-journal
+
+# Local Environment Configurations
+.env
+
+# Build outputs
+client/dist/
+client/dist-ssr/
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
