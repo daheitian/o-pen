@@ -63,15 +63,62 @@ function extractTags(content) {
   return [...new Set(matches.map(m => m.slice(1)))];
 }
 
+// Helper: Extract links to other cards (e.g. [[2]])
+function extractLinks(content) {
+  if (!content) return [];
+  const linkRegex = /\[\[(\d+)\]\]/g;
+  const matches = [...content.matchAll(linkRegex)];
+  return [...new Set(matches.map(m => parseInt(m[1], 10)))];
+}
+
+// Helper: Update card links in note_links table
+function updateNoteLinks(sourceId, targetIds) {
+  // 1. Delete existing links from this card
+  db.query('DELETE FROM note_links WHERE source_id = ?').run(sourceId);
+  
+  // 2. Insert new valid links
+  if (targetIds.length > 0) {
+    const insertStmt = db.query('INSERT OR IGNORE INTO note_links (source_id, target_id) VALUES (?, ?)');
+    for (const targetId of targetIds) {
+      // Check if target card actually exists to avoid broken links
+      const exists = db.query('SELECT 1 FROM notes WHERE id = ?').get(targetId);
+      if (exists) {
+        insertStmt.run(sourceId, targetId);
+      }
+    }
+  }
+}
+
 // 1. Get all notes
 app.get('/api/notes', (req, res) => {
   try {
     const stmt = db.query('SELECT * FROM notes ORDER BY created_at DESC');
     const notes = stmt.all();
-    // Parse tags JSON string back to array
+    
+    // Fetch all link relations in one go to avoid N+1 query performance bottleneck
+    const allLinks = db.query('SELECT source_id, target_id FROM note_links').all();
+    
+    // Group links by source and target
+    const linksMap = {};
+    const backlinksMap = {};
+    
+    allLinks.forEach(rel => {
+      const src = rel.source_id;
+      const tgt = rel.target_id;
+      
+      if (!linksMap[src]) linksMap[src] = [];
+      linksMap[src].push(tgt);
+      
+      if (!backlinksMap[tgt]) backlinksMap[tgt] = [];
+      backlinksMap[tgt].push(src);
+    });
+
+    // Parse tags JSON string back to array and associate links/backlinks
     const parsedNotes = notes.map(note => ({
       ...note,
-      tags: note.tags ? JSON.parse(note.tags) : []
+      tags: note.tags ? JSON.parse(note.tags) : [],
+      links: linksMap[note.id] || [],
+      backlinks: backlinksMap[note.id] || []
     }));
     res.json(parsedNotes);
   } catch (err) {
@@ -96,12 +143,21 @@ app.post('/api/notes', (req, res) => {
       VALUES (?, ?, ?, ?)
     `);
     const result = stmt.run(content, tagsStr, timeStr, timeStr);
+    const newId = result.lastInsertRowid;
     
+    // Update links inside the card
+    const targetIds = extractLinks(content);
+    updateNoteLinks(newId, targetIds);
+    
+    const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(newId).map(r => r.target_id);
+
     // Return created note
     res.status(201).json({
-      id: result.lastInsertRowid,
+      id: newId,
       content,
       tags,
+      links: finalLinks,
+      backlinks: [],
       created_at: timeStr,
       updated_at: timeStr
     });
@@ -131,10 +187,20 @@ app.put('/api/notes/:id', (req, res) => {
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Note not found' });
     }
+    
+    // Update links inside the card
+    const targetIds = extractLinks(content);
+    updateNoteLinks(Number(id), targetIds);
+    
+    const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(Number(id)).map(r => r.target_id);
+    const finalBacklinks = db.query('SELECT source_id FROM note_links WHERE target_id = ?').all(Number(id)).map(r => r.source_id);
+
     res.json({
       id: Number(id),
       content,
       tags,
+      links: finalLinks,
+      backlinks: finalBacklinks,
       updated_at: timeStr
     });
   } catch (err) {

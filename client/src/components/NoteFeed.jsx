@@ -91,7 +91,23 @@ export default function NoteFeed({
     setEditingContent('');
   };
 
-  // Helper to parse formatting (bold, tags, bullets, images, links)
+  const handleCardLinkClick = (targetId) => {
+    const element = document.getElementById(`note-card-${targetId}`);
+    if (element) {
+      // 1. Smooth scroll
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // 2. Glow effect animation
+      element.classList.add('glow-highlight');
+      setTimeout(() => {
+        element.classList.remove('glow-highlight');
+      }, 2000);
+    } else {
+      alert(`未找到卡片 #${targetId}，可能该卡片已被删除`);
+    }
+  };
+
+  // Helper to parse formatting (bold, tags, bullets, images, links, card links)
   const renderFormattedText = (text) => {
     if (!text) return null;
     const lines = text.split('\n');
@@ -101,7 +117,7 @@ export default function NoteFeed({
       const content = isBullet ? line.trim().substring(2) : line;
       
       const elements = [];
-      const regex = /(\*\*.*?\*\*|#[a-zA-Z0-9_\u4e00-\u9fa5-]+|!\[.*?\]\(.*?\)|https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=/?&()]*)/g;
+      const regex = /(\*\*.*?\*\*|#[a-zA-Z0-9_\u4e00-\u9fa5-]+|!\[.*?\]\(.*?\)|https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=/?&()]*|\[\[\d+\]\])/g;
       const matches = [...content.matchAll(regex)];
       let lastIdx = 0;
 
@@ -171,6 +187,34 @@ export default function NoteFeed({
               >
                 {matchText}
               </a>
+            );
+          } else if (matchText.startsWith('[[') && matchText.endsWith(']]')) {
+            const targetId = matchText.slice(2, -2);
+            elements.push(
+              <span 
+                key={`card-link-${matchIdx}`}
+                className="card-link-pill"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCardLinkClick(targetId);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  backgroundColor: 'rgba(var(--primary-rgb), 0.1)',
+                  color: 'var(--primary-color)',
+                  padding: '1px 6px',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  border: '1px solid rgba(var(--primary-rgb), 0.2)',
+                  fontSize: '0.9em',
+                  userSelect: 'none'
+                }}
+              >
+                🔗 卡片 #{targetId}
+              </span>
             );
           }
           lastIdx = matchStart + matchText.length;
@@ -279,7 +323,7 @@ export default function NoteFeed({
             </div>
           ) : (
             filteredNotes.map(note => (
-              <div key={note.id} className="note-card">
+              <div key={note.id} id={`note-card-${note.id}`} className="note-card">
                 {editingId === note.id ? (
                   /* Editing Mode */
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -338,6 +382,72 @@ export default function NoteFeed({
                     <div className="card-body">
                       {renderFormattedText(note.content)}
                     </div>
+
+                    {/* Render Links and Backlinks */}
+                    {((note.links && note.links.length > 0) || (note.backlinks && note.backlinks.length > 0)) && (
+                      <div className="card-relations" style={{
+                        marginTop: '12px',
+                        paddingTop: '8px',
+                        borderTop: '1px dashed var(--border-color)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        fontSize: '12px'
+                      }}>
+                        {note.links && note.links.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ color: 'var(--text-light)', fontWeight: '500' }}>引用了:</span>
+                            {note.links.map(linkId => (
+                              <span 
+                                key={`relation-link-${linkId}`}
+                                className="relation-pill"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCardLinkClick(linkId);
+                                }}
+                                style={{
+                                  backgroundColor: 'rgba(var(--primary-rgb), 0.1)',
+                                  color: 'var(--primary-color)',
+                                  padding: '2px 6px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  cursor: 'pointer',
+                                  fontWeight: '500',
+                                  border: '1px solid rgba(var(--primary-rgb), 0.2)'
+                                }}
+                              >
+                                🔗 #{linkId}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {note.backlinks && note.backlinks.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ color: 'var(--text-light)', fontWeight: '500' }}>被引用:</span>
+                            {note.backlinks.map(linkId => (
+                              <span 
+                                key={`relation-backlink-${linkId}`}
+                                className="relation-pill"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCardLinkClick(linkId);
+                                }}
+                                style={{
+                                  backgroundColor: 'rgba(52, 199, 89, 0.1)',
+                                  color: '#34c759',
+                                  padding: '2px 6px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  cursor: 'pointer',
+                                  fontWeight: '500',
+                                  border: '1px solid rgba(52, 199, 89, 0.2)'
+                                }}
+                              >
+                                ↩️ #{linkId}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>

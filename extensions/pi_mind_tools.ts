@@ -13,6 +13,34 @@ function extractTags(content: string): string[] {
   return [...new Set(matches.map(m => m.slice(1)))];
 }
 
+// Helper: Extract links to other cards (e.g. [[2]])
+function extractLinks(content: string): number[] {
+  if (!content) return [];
+  const linkRegex = /\[\[(\d+)\]\]/g;
+  const matches = [...content.matchAll(linkRegex)];
+  return [...new Set(matches.map(m => parseInt(m[1], 10)))];
+}
+
+// Helper: Update card links in note_links table
+function updateNoteLinks(db: DatabaseSync, sourceId: number, targetIds: number[]) {
+  // 1. Delete existing links from this card
+  const deleteStmt = db.prepare('DELETE FROM note_links WHERE source_id = ?');
+  deleteStmt.run(sourceId);
+  
+  // 2. Insert new valid links
+  if (targetIds.length > 0) {
+    const insertStmt = db.prepare('INSERT OR IGNORE INTO note_links (source_id, target_id) VALUES (?, ?)');
+    for (const targetId of targetIds) {
+      // Check if target card actually exists to avoid broken links
+      const checkStmt = db.prepare('SELECT 1 FROM notes WHERE id = ?');
+      const exists = checkStmt.get(targetId);
+      if (exists) {
+        insertStmt.run(sourceId, targetId);
+      }
+    }
+  }
+}
+
 export default function (pi: ExtensionAPI) {
   const dbPath = path.resolve(process.cwd(), "notes.db");
   
@@ -26,7 +54,7 @@ export default function (pi: ExtensionAPI) {
     name: "create_note",
     description: "Creates a new note card in the user's database. If the user asks you to save, create, write, or record a thought, idea, action item, or note card, call this tool.",
     parameters: Type.Object({
-      content: Type.String({ description: "The text content of the note card. You can include hashtags (e.g. #idea) and markdown bold or lists." })
+      content: Type.String({ description: "The text content of the note card. You can include hashtags (e.g. #idea), markdown bold or lists, and link references using double brackets e.g. [[CardID]] (e.g. [[2]])." })
     }),
     execute: async (toolCallId, { content }) => {
       try {
@@ -44,12 +72,18 @@ export default function (pi: ExtensionAPI) {
         // Get last inserted rowid
         const lastIdStmt = db.prepare("SELECT last_insert_rowid() AS id");
         const lastIdResult = lastIdStmt.get() as { id: number };
+        const newId = lastIdResult.id;
+        
+        // Update links inside the card
+        const targetIds = extractLinks(content);
+        updateNoteLinks(db, newId, targetIds);
+        
         db.close();
         
         return {
           content: [{
             type: "text",
-            text: `Successfully created note card [Note ID: ${lastIdResult.id}]. Content: "${content}"`
+            text: `Successfully created note card [Note ID: ${newId}]. Content: "${content}"`
           }]
         };
       } catch (err: any) {
@@ -69,7 +103,7 @@ export default function (pi: ExtensionAPI) {
     description: "Modifies or updates the text content of an existing note card in the database by its ID.",
     parameters: Type.Object({
       id: Type.Number({ description: "The ID of the note card to update." }),
-      content: Type.String({ description: "The new content for the note card." })
+      content: Type.String({ description: "The new content for the note card. You can include links to other notes using [[CardID]] (e.g. [[5]])." })
     }),
     execute: async (toolCallId, { id, content }) => {
       try {
@@ -84,6 +118,11 @@ export default function (pi: ExtensionAPI) {
           WHERE id = ?
         `);
         stmt.run(content, tagsStr, timeStr, id);
+        
+        // Update links inside the card
+        const targetIds = extractLinks(content);
+        updateNoteLinks(db, id, targetIds);
+        
         db.close();
         
         return {
@@ -134,7 +173,7 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // 4. Tool to search notes (New!)
+  // 4. Tool to search notes
   pi.registerTool({
     name: "search_notes",
     description: "Searches note cards in the user's database by keyword (text match) or by tag (e.g. #idea). Use this when user asks about specific topics, questions, or notes they took.",
@@ -192,7 +231,7 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // 5. Tool to list recent notes (New!)
+  // 5. Tool to list recent notes
   pi.registerTool({
     name: "list_recent_notes",
     description: "Retrieves the most recently created or updated note cards. Use this to get an overview of recent notes or context if the user asks about recent logs.",

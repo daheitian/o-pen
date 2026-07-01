@@ -25,6 +25,15 @@ db.exec(`
     content TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS note_links (
+    source_id INTEGER,
+    target_id INTEGER,
+    PRIMARY KEY (source_id, target_id),
+    FOREIGN KEY (source_id) REFERENCES notes(id) ON DELETE CASCADE,
+    FOREIGN KEY (target_id) REFERENCES notes(id) ON DELETE CASCADE
+  );
+
 `);
 
 console.log(`[Database] Initialized SQLite database at: ${dbPath}`);
