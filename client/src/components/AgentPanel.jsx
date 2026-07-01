@@ -1,4 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { marked } from 'marked';
+
+// Configure marked options
+marked.setOptions({
+  gfm: true,
+  breaks: true
+});
 
 export default function AgentPanel({ 
   messages, 
@@ -26,49 +33,39 @@ export default function AgentPanel({
     onSendMessage(suggestionText);
   };
 
-  // Render markdown-like elements in chat bubble (lists, bold)
-  const formatAgentResponse = (text) => {
-    if (!text) return '';
-    const lines = text.split('\n');
-    return lines.map((line, idx) => {
-      // Check if bullet
-      const isBullet = line.trim().startsWith('- ') || line.trim().startsWith('* ');
-      let content = isBullet ? line.trim().substring(2) : line;
-
-      // Handle bold **text**
-      const elements = [];
-      const boldRegex = /\*\*(.*?)\*\*/g;
-      const matches = [...content.matchAll(boldRegex)];
-      let lastIdx = 0;
-
-      if (matches.length === 0) {
-        elements.push(content);
-      } else {
-        matches.forEach((m, matchIdx) => {
-          const boldText = m[1];
-          const matchStart = m.index;
-          
-          if (matchStart > lastIdx) {
-            elements.push(content.substring(lastIdx, matchStart));
-          }
-          elements.push(<strong key={`bold-${matchIdx}`}>{boldText}</strong>);
-          lastIdx = matchStart + m[0].length;
-        });
-
-        if (lastIdx < content.length) {
-          elements.push(content.substring(lastIdx));
+  const handleChatClick = (e) => {
+    const target = e.target.closest('.chat-card-link');
+    if (target) {
+      const cardId = target.getAttribute('data-id');
+      if (cardId) {
+        const element = document.getElementById(`note-card-${cardId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('glow-highlight');
+          setTimeout(() => {
+            element.classList.remove('glow-highlight');
+          }, 2000);
         }
       }
+    }
+  };
 
-      if (isBullet) {
-        return (
-          <ul key={idx} style={{ margin: '4px 0 4px 16px', paddingLeft: '0' }}>
-            <li style={{ listStyleType: 'disc' }}>{elements}</li>
-          </ul>
-        );
-      }
-      return <p key={idx} style={{ margin: '4px 0', minHeight: '1em' }}>{elements}</p>;
-    });
+  // Render markdown in chat bubble using marked
+  const formatAgentResponse = (text) => {
+    if (!text) return '';
+    
+    // Parse double bracket card links [[ID]]
+    const processedText = text.replace(/\[\[(\d+)\]\]/g, '<span class="chat-card-link" data-id="$1">🔗 卡片 #$1</span>');
+    
+    // Parse markdown to HTML safely (marked parses standard markdown format)
+    const html = marked.parse(processedText);
+    return (
+      <div 
+        className="markdown-body"
+        dangerouslySetInnerHTML={{ __html: html }}
+        onClick={handleChatClick}
+      />
+    );
   };
 
   const suggestions = [
