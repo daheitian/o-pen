@@ -63,12 +63,12 @@ function extractTags(content) {
   return [...new Set(matches.map(m => m.slice(1)))];
 }
 
-// Helper: Extract links to other cards (e.g. [[2]])
+// Helper: Extract links to other cards (e.g. [[uuid]])
 function extractLinks(content) {
   if (!content) return [];
-  const linkRegex = /\[\[(\d+)\]\]/g;
+  const linkRegex = /\[\[([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\]\]/gi;
   const matches = [...content.matchAll(linkRegex)];
-  return [...new Set(matches.map(m => parseInt(m[1], 10)))];
+  return [...new Set(matches.map(m => m[1].toLowerCase()))];
 }
 
 // Helper: Update card links in note_links table
@@ -138,16 +138,16 @@ app.post('/api/notes', (req, res) => {
   try {
     // Optionally accept created_at from client for historical mock data (e.g., for heatmap testing)
     const timeStr = created_at || new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const uuid = crypto.randomUUID();
     const stmt = db.query(`
-      INSERT INTO notes (content, tags, created_at, updated_at) 
-      VALUES (?, ?, ?, ?)
+      INSERT INTO notes (id, content, tags, created_at, updated_at) 
+      VALUES (?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(content, tagsStr, timeStr, timeStr);
-    const newId = result.lastInsertRowid;
+    stmt.run(uuid, content, tagsStr, timeStr, timeStr);
     
     // Update links inside the card
     const targetIds = extractLinks(content);
-    updateNoteLinks(newId, targetIds);
+    updateNoteLinks(uuid, targetIds);
     
     // Sync tags with tags table
     if (tags.length > 0) {
@@ -155,11 +155,11 @@ app.post('/api/notes', (req, res) => {
       tags.forEach(tag => insertTagStmt.run(tag));
     }
     
-    const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(newId).map(r => r.target_id);
+    const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(uuid).map(r => r.target_id);
 
     // Return created note
     res.status(201).json({
-      id: newId,
+      id: uuid,
       content,
       tags,
       links: finalLinks,
@@ -196,7 +196,7 @@ app.put('/api/notes/:id', (req, res) => {
     
     // Update links inside the card
     const targetIds = extractLinks(content);
-    updateNoteLinks(Number(id), targetIds);
+    updateNoteLinks(id, targetIds);
     
     // Sync tags with tags table
     if (tags.length > 0) {
@@ -204,11 +204,11 @@ app.put('/api/notes/:id', (req, res) => {
       tags.forEach(tag => insertTagStmt.run(tag));
     }
     
-    const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(Number(id)).map(r => r.target_id);
-    const finalBacklinks = db.query('SELECT source_id FROM note_links WHERE target_id = ?').all(Number(id)).map(r => r.source_id);
+    const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(id).map(r => r.target_id);
+    const finalBacklinks = db.query('SELECT source_id FROM note_links WHERE target_id = ?').all(id).map(r => r.source_id);
 
     res.json({
-      id: Number(id),
+      id: id,
       content,
       tags,
       links: finalLinks,

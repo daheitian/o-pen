@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import path from "path";
 import fs from "fs";
+import { randomUUID } from "node:crypto";
 import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
@@ -13,16 +14,16 @@ function extractTags(content: string): string[] {
   return [...new Set(matches.map(m => m.slice(1)))];
 }
 
-// Helper: Extract links to other cards (e.g. [[2]])
-function extractLinks(content: string): number[] {
+// Helper: Extract links to other cards (e.g. [[uuid]])
+function extractLinks(content: string): string[] {
   if (!content) return [];
-  const linkRegex = /\[\[(\d+)\]\]/g;
+  const linkRegex = /\[\[([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\]\]/gi;
   const matches = [...content.matchAll(linkRegex)];
-  return [...new Set(matches.map(m => parseInt(m[1], 10)))];
+  return [...new Set(matches.map(m => m[1].toLowerCase()))];
 }
 
 // Helper: Update card links in note_links table
-function updateNoteLinks(db: DatabaseSync, sourceId: number, targetIds: number[]) {
+function updateNoteLinks(db: DatabaseSync, sourceId: string, targetIds: string[]) {
   // 1. Delete existing links from this card
   const deleteStmt = db.prepare('DELETE FROM note_links WHERE source_id = ?');
   deleteStmt.run(sourceId);
@@ -54,7 +55,7 @@ export default function (pi: ExtensionAPI) {
     name: "create_note",
     description: "Creates a new note card in the user's database. If the user asks you to save, create, write, or record a thought, idea, action item, or note card, call this tool.",
     parameters: Type.Object({
-      content: Type.String({ description: "The text content of the note card. You can include hashtags (e.g. #idea), markdown bold or lists, and link references using double brackets e.g. [[CardID]] (e.g. [[2]])." })
+      content: Type.String({ description: "The text content of the note card. You can include hashtags (e.g. #idea), markdown bold or lists, and link references using double brackets e.g. [[uuid]]." })
     }),
     execute: async (toolCallId, { content }) => {
       try {
@@ -62,21 +63,17 @@ export default function (pi: ExtensionAPI) {
         const tags = extractTags(content);
         const tagsStr = JSON.stringify(tags);
         const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+        const uuid = randomUUID();
         
         const stmt = db.prepare(`
-          INSERT INTO notes (content, tags, created_at, updated_at) 
-          VALUES (?, ?, ?, ?)
+          INSERT INTO notes (id, content, tags, created_at, updated_at) 
+          VALUES (?, ?, ?, ?, ?)
         `);
-        stmt.run(content, tagsStr, timeStr, timeStr);
-        
-        // Get last inserted rowid
-        const lastIdStmt = db.prepare("SELECT last_insert_rowid() AS id");
-        const lastIdResult = lastIdStmt.get() as { id: number };
-        const newId = lastIdResult.id;
+        stmt.run(uuid, content, tagsStr, timeStr, timeStr);
         
         // Update links inside the card
         const targetIds = extractLinks(content);
-        updateNoteLinks(db, newId, targetIds);
+        updateNoteLinks(db, uuid, targetIds);
         
         // Sync tags with tags table
         if (tags.length > 0) {
@@ -91,7 +88,7 @@ export default function (pi: ExtensionAPI) {
         return {
           content: [{
             type: "text",
-            text: `Successfully created note card [Note ID: ${newId}]. Content: "${content}"`
+            text: `Successfully created note card [Note ID: ${uuid}]. Content: "${content}"`
           }]
         };
       } catch (err: any) {
@@ -110,8 +107,8 @@ export default function (pi: ExtensionAPI) {
     name: "update_note",
     description: "Modifies or updates the text content of an existing note card in the database by its ID.",
     parameters: Type.Object({
-      id: Type.Number({ description: "The ID of the note card to update." }),
-      content: Type.String({ description: "The new content for the note card. You can include links to other notes using [[CardID]] (e.g. [[5]])." })
+      id: Type.String({ description: "The UUID of the note card to update." }),
+      content: Type.String({ description: "The new content for the note card. You can include links to other notes using [[uuid]]." })
     }),
     execute: async (toolCallId, { id, content }) => {
       try {
@@ -163,7 +160,7 @@ export default function (pi: ExtensionAPI) {
     name: "delete_note",
     description: "Deletes a note card from the database by its ID.",
     parameters: Type.Object({
-      id: Type.Number({ description: "The ID of the note card to delete." })
+      id: Type.String({ description: "The UUID of the note card to delete." })
     }),
     execute: async (toolCallId, { id }) => {
       try {
@@ -220,7 +217,7 @@ export default function (pi: ExtensionAPI) {
         query += " ORDER BY created_at DESC LIMIT 30";
 
         const stmt = db.prepare(query);
-        const rows = stmt.all(...params) as { id: number; content: string; created_at: string }[];
+        const rows = stmt.all(...params) as { id: string; content: string; created_at: string }[];
         db.close();
 
         if (rows.length === 0) {
@@ -265,7 +262,7 @@ export default function (pi: ExtensionAPI) {
           ORDER BY created_at DESC 
           LIMIT ?
         `);
-        const rows = stmt.all(actualLimit) as { id: number; content: string; created_at: string }[];
+        const rows = stmt.all(actualLimit) as { id: string; content: string; created_at: string }[];
         db.close();
 
         if (rows.length === 0) {

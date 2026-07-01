@@ -180,7 +180,7 @@ export default function NoteFeed({
         element.classList.remove('glow-highlight');
       }, 2000);
     } else {
-      alert(`未找到卡片 #${targetId}，可能该卡片已被删除`);
+      alert(`未找到卡片 (${targetId.slice(0, 8)})，可能该卡片已被删除`);
     }
   };
 
@@ -194,7 +194,7 @@ export default function NoteFeed({
       const content = isBullet ? line.trim().substring(2) : line;
       
       const elements = [];
-      const regex = /(\*\*.*?\*\*|#[a-zA-Z0-9_\u4e00-\u9fa5-]+|!\[.*?\]\(.*?\)|https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=/?&()]*|\[\[\d+\]\])/g;
+      const regex = /(\*\*.*?\*\*|#[a-zA-Z0-9_\u4e00-\u9fa5-]+|!\[.*?\]\(.*?\)|https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._\+~#=/?&()]*|\[\[[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\]\])/gi;
       const matches = [...content.matchAll(regex)];
       let lastIdx = 0;
 
@@ -290,7 +290,7 @@ export default function NoteFeed({
                   userSelect: 'none'
                 }}
               >
-                🔗 卡片 #{targetId}
+                🔗 卡片 #${targetId.slice(0, 8)}
               </span>
             );
           }
@@ -391,7 +391,7 @@ export default function NoteFeed({
                         className={`linker-suggestion-item ${index === selectedLinkerIndex ? 'active' : ''}`}
                         onClick={() => insertCardLink(suggestion.id)}
                       >
-                        <span className="linker-id-badge">#ID: {suggestion.id}</span>
+                        <span className="linker-id-badge">#ID: {suggestion.id.slice(0, 8)}</span>
                         <span className="linker-text-preview">{previewText}</span>
                       </div>
                     );
@@ -528,7 +528,7 @@ export default function NoteFeed({
                                   border: '1px solid rgba(var(--primary-rgb), 0.2)'
                                 }}
                               >
-                                🔗 #{linkId}
+                                🔗 #{linkId.slice(0, 8)}
                               </span>
                             ))}
                           </div>
@@ -554,7 +554,7 @@ export default function NoteFeed({
                                   border: '1px solid rgba(52, 199, 89, 0.2)'
                                 }}
                               >
-                                ↩️ #{linkId}
+                                ↩️ #{linkId.slice(0, 8)}
                               </span>
                             ))}
                           </div>
