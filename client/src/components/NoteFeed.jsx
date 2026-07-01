@@ -443,16 +443,7 @@ export default function NoteFeed({
                     <textarea
                       value={editingContent}
                       onChange={(e) => setEditingContent(e.target.value)}
-                      style={{
-                        width: '100%',
-                        minHeight: '100px',
-                        border: '1px solid var(--primary-color)',
-                        borderRadius: 'var(--radius-sm)',
-                        padding: '8px',
-                        outline: 'none',
-                        fontSize: '14px',
-                        fontFamily: 'inherit'
-                      }}
+                      className="card-inline-editor"
                     />
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                       <button 

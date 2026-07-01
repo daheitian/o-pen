@@ -1152,3 +1152,24 @@ input::placeholder {
   background-color: #ef4444;
   color: white;
 }
+
+/* Card Inline Editor Textarea */
+.card-inline-editor {
+  width: 100%;
+  min-height: 100px;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  outline: none;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  transition: var(--transition);
+}
+
+.card-inline-editor:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.15);
+}
