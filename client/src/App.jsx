@@ -14,6 +14,56 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isThinking, setIsThinking] = useState(false);
 
+  // Resize sidebars
+  const [leftWidth, setLeftWidth] = useState(260);
+  const [rightWidth, setRightWidth] = useState(360);
+
+  const handleLeftMouseDown = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = leftWidth;
+
+    const handleMouseMove = (moveEvent) => {
+      const newWidth = Math.max(180, Math.min(450, startWidth + (moveEvent.clientX - startX)));
+      setLeftWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const handleRightMouseDown = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = rightWidth;
+
+    const handleMouseMove = (moveEvent) => {
+      const newWidth = Math.max(280, Math.min(600, startWidth - (moveEvent.clientX - startX)));
+      setRightWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
   // Fetch all initial data
   useEffect(() => {
     fetchNotes();
@@ -198,7 +248,10 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
+    <div 
+      className="app-container"
+      style={{ gridTemplateColumns: `${leftWidth}px 4px 1fr 4px ${rightWidth}px` }}
+    >
       {/* 1. Left Sidebar */}
       <Sidebar 
         stats={stats} 
@@ -210,6 +263,9 @@ export default function App() {
           fetchStats();
         }}
       />
+
+      {/* Left Resizer */}
+      <div className="resizer resizer-left" onMouseDown={handleLeftMouseDown} />
 
       {/* 2. Middle Notes Feed */}
       <NoteFeed 
@@ -223,7 +279,10 @@ export default function App() {
         onDeleteNote={handleDeleteNote}
       />
 
-      {/* 3. Right Agent Interaction Area */}
+      {/* Right Resizer */}
+      <div className="resizer resizer-right" onMouseDown={handleRightMouseDown} />
+
+      {/* 3. Right Agent Panel */}
       <AgentPanel 
         messages={messages}
         isThinking={isThinking}

@@ -50,17 +50,51 @@ input::placeholder {
 /* App Layout */
 .app-container {
   display: grid;
-  grid-template-columns: 260px 1fr 360px;
   height: 100vh;
   background-color: var(--bg-main);
 }
 
+/* Resizer Bars */
+.resizer {
+  cursor: col-resize;
+  position: relative;
+  z-index: 10;
+  width: 4px;
+  height: 100vh;
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.resizer-left {
+  border-right: 1px solid var(--border-color);
+}
+
+.resizer-right {
+  border-left: 1px solid var(--border-color);
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+  cursor: col-resize;
+}
+
+.resizer:hover,
+.resizer:active {
+  background-color: var(--primary-color);
+}
+
 @media (max-width: 1024px) {
   .app-container {
-    grid-template-columns: 240px 1fr;
+    grid-template-columns: 240px 4px 1fr !important;
   }
+  .resizer-right,
   .agent-column {
-    display: none; /* Hide agent panel on small screens */
+    display: none !important;
   }
 }
 
