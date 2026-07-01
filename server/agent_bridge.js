@@ -12,21 +12,6 @@ const __dirname = path.dirname(__filename);
 const homeDir = os.homedir();
 const piMinimaxPath = path.join(homeDir, '.pi/agent/bin/pi-minimax');
 
-// Helper: Fetch all card notes from the SQLite database to build the context prompt
-function getNotesContextMarkdown() {
-  try {
-    const stmt = db.query('SELECT id, content, created_at FROM notes ORDER BY created_at DESC LIMIT 30');
-    const rows = stmt.all();
-    if (rows.length === 0) {
-      return '用户目前没有任何卡片笔记。';
-    }
-    return rows.map(r => `- [卡片 ID: ${r.id}] (创建于: ${r.created_at})\n  内容: ${r.content}`).join('\n\n');
-  } catch (err) {
-    console.error('[Bridge] Error fetching notes context:', err);
-    return '获取笔记上下文失败。';
-  }
-}
-
 export async function handleAgentChat(req, res) {
   const { message, conversationId = 'default_chat' } = req.body;
   if (!message) {
@@ -48,19 +33,22 @@ export async function handleAgentChat(req, res) {
     // Send initialization event
     res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`);
 
-    // 3. Compile context from cards and build the final prompt
-    const notesContext = getNotesContextMarkdown();
-    const finalPrompt = `你是一个卡片笔记助手 Pi Agent。下面是用户的卡片笔记内容作为你的参考上下文：
+    // 3. Compile prompt for Pi Agent with instructions on tools instead of full DB dump
+    const finalPrompt = `你是一个卡片笔记助手 Pi Agent。
+你的任务是协助用户整理、搜索、建立和修改本地卡片笔记。
 
-${notesContext}
+你可以通过以下插件工具直接与用户的 SQLite 数据库进行交互（无需在 Prompt 中堆砌所有卡片）：
+1. \`create_note(content)\`: 创建一条新卡片笔记。
+2. \`update_note(id, content)\`: 更新已有的卡片笔记内容。
+3. \`delete_note(id)\`: 删除指定 ID 的卡片笔记。
+4. \`search_notes(keyword, tag)\`: 搜索包含该关键词或特定标签的卡片。
+5. \`list_recent_notes(limit)\`: 获取最近记录的几条卡片笔记，用来快速掌握用户近期的笔记动态。
 
----
 规则：
-1. 你的回答必须基于上述卡片笔记内容。如果用户的提问跟上述笔记内容相关，请结构化解答并主动引用相关的 [卡片 ID: x]。
-2. 如果用户只是进行日常问候，你可以友好地问好，并说明你是卡片笔记助手。
-3. 如果用户问的内容在上述笔记中没有提及，请礼貌地指出该内容不存在于笔记中。
-4. 保持回答简洁明了，用词亲切。
-5. 必须使用中文回答。
+1. **优先调用工具**：当用户的提问涉及查找笔记、总结笔记、创建、修改或删除笔记时，你必须根据需要主动调用相应的数据库工具（例如 \`search_notes\` 或 \`list_recent_notes\`），切勿凭空编造结果。
+2. 在通过工具获得数据并分析后，再生成最终回答。回答中引用卡片时必须标注 \`[卡片 ID: x]\`。
+3. 如果用户只是进行日常闲聊（如说“你好”、“谢谢”），直接友好互动即可，无需调用工具。
+4. 保持回答简洁明了，用词亲切，使用中文回答。
 
 用户问题：${message}`;
 
@@ -137,7 +125,7 @@ export function getAgentHistory() {
 export function clearAgentHistory() {
   db.query('DELETE FROM messages').run();
   
-  // Clear conversation state history folder in python agent to reset agent memory
+  // Clear conversation state history folder in agent to reset agent memory
   const historyDir = path.resolve(__dirname, '../agent/history');
   try {
     if (fs.existsSync(historyDir)) {
@@ -148,6 +136,6 @@ export function clearAgentHistory() {
       console.log('[Bridge] Cleared Agent persistence directory');
     }
   } catch (e) {
-    console.error('[Bridge] Error clearing python agent persistence history:', e);
+    console.error('[Bridge] Error clearing agent persistence history:', e);
   }
 }

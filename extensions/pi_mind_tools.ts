@@ -133,4 +133,107 @@ export default function (pi: ExtensionAPI) {
       }
     }
   });
+
+  // 4. Tool to search notes (New!)
+  pi.registerTool({
+    name: "search_notes",
+    description: "Searches note cards in the user's database by keyword (text match) or by tag (e.g. #idea). Use this when user asks about specific topics, questions, or notes they took.",
+    parameters: Type.Object({
+      keyword: Type.Optional(Type.String({ description: "Sub-string keyword to look up inside note content." })),
+      tag: Type.Optional(Type.String({ description: "Tag name to match (do not include the hash sign '#')." }))
+    }),
+    execute: async (toolCallId, { keyword, tag }) => {
+      try {
+        if (!keyword && !tag) {
+          return {
+            content: [{ type: "text", text: "Error: You must provide at least a keyword or a tag to search." }]
+          };
+        }
+
+        const db = new DatabaseSync(dbPath);
+        let query = "SELECT id, content, created_at FROM notes WHERE 1=1";
+        const params: any[] = [];
+
+        if (keyword) {
+          query += " AND content LIKE ?";
+          params.push(`%${keyword}%`);
+        }
+        if (tag) {
+          query += " AND tags LIKE ?";
+          params.push(`%"${tag}"%`);
+        }
+        query += " ORDER BY created_at DESC LIMIT 30";
+
+        const stmt = db.prepare(query);
+        const rows = stmt.all(...params) as { id: number; content: string; created_at: string }[];
+        db.close();
+
+        if (rows.length === 0) {
+          return {
+            content: [{ type: "text", text: `No notes found matching search query (keyword: "${keyword || 'none'}", tag: "${tag || 'none'}").` }]
+          };
+        }
+
+        const formatted = rows.map(r => `[卡片 ID: ${r.id}] (时间: ${r.created_at})\n内容: ${r.content}`).join("\n\n---\n\n");
+        return {
+          content: [{
+            type: "text",
+            text: `Search results:\n\n${formatted}`
+          }]
+        };
+      } catch (err: any) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error searching notes: ${err.message}`
+          }]
+        };
+      }
+    }
+  });
+
+  // 5. Tool to list recent notes (New!)
+  pi.registerTool({
+    name: "list_recent_notes",
+    description: "Retrieves the most recently created or updated note cards. Use this to get an overview of recent notes or context if the user asks about recent logs.",
+    parameters: Type.Object({
+      limit: Type.Optional(Type.Number({ description: "Max number of notes to retrieve. Default is 10." }))
+    }),
+    execute: async (toolCallId, { limit }) => {
+      try {
+        const db = new DatabaseSync(dbPath);
+        const actualLimit = limit || 10;
+        
+        const stmt = db.prepare(`
+          SELECT id, content, created_at 
+          FROM notes 
+          ORDER BY created_at DESC 
+          LIMIT ?
+        `);
+        const rows = stmt.all(actualLimit) as { id: number; content: string; created_at: string }[];
+        db.close();
+
+        if (rows.length === 0) {
+          return {
+            content: [{ type: "text", text: "The database is empty. User hasn't created any cards yet." }]
+          };
+        }
+
+        const formatted = rows.map(r => `[卡片 ID: ${r.id}] (时间: ${r.created_at})\n内容: ${r.content}`).join("\n\n---\n\n");
+        return {
+          content: [{
+            type: "text",
+            text: `Most recent ${rows.length} notes:\n\n${formatted}`
+          }]
+        };
+      } catch (err: any) {
+        return {
+          content: [{
+            type: "text",
+            text: `Error retrieving recent notes: ${err.message}`
+          }]
+        };
+      }
+    }
+  });
 }
