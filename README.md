@@ -86,3 +86,31 @@ bun run dev:server
 ```bash
 bun run dev:client
 ```
+
+---
+
+## 🔌 Pi Agent 智能体修改笔记插件 (Extension)
+
+我们为 Pi Agent 编写了一个专属扩展插件 [pi_mind_tools.ts](file:///Users/zion/Projects/pi-mind/extensions/pi_mind_tools.ts)。该插件能让 Pi Agent 在处理会话时直接调用以下本地数据库工具：
+* **`create_note`**: 创建新卡片，自动提取 `#标签`
+* **`update_note`**: 修改指定 ID 的卡片内容，并自动重新整理标签
+* **`delete_note`**: 删除指定 ID 的卡片
+
+### 🛠️ 插件安装与使用
+
+只需将项目中的扩展脚本复制到 Pi Agent 默认的全局扩展目录中即可：
+
+```bash
+# 创建扩展目录（如果不存在）
+mkdir -p ~/.pi/agent/extensions
+
+# 将扩展复制过去
+cp extensions/pi_mind_tools.ts ~/.pi/agent/extensions/
+```
+
+安装完成后，在项目根目录下运行 `pi` 命令行或者在 WebUI 右侧的 AI 对话面板中，你可以直接指示它：
+- *“帮我记个笔记：今天完成了 Bun 的重构，感觉很好 #refactor”*
+- *“帮我把 ID 为 5 的卡片内容改成：xxx”*
+- *“帮我删掉卡片 ID 3”*
+
+智能体将会直接调用该工具修改本地数据库，卡片流数据会自动实时刷新！
