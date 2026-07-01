@@ -1,21 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
+import ConfirmDeleteDialog from './ConfirmDeleteDialog';
+import RenameTagDialog from './RenameTagDialog';
+import type { Stats, TagInfo } from '../types';
 
-export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onRefreshData }) {
+type SidebarProps = {
+  stats: Stats;
+  activeTag: string | null;
+  setActiveTag: (tag: string | null) => void;
+  noteCount: number;
+  onRefreshData?: () => void;
+};
+
+export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onRefreshData }: SidebarProps) {
   const { totalTags = 0, tagFrequency = {}, heatmap = [] } = stats;
   
   // Tag Manager States
   const [showTagManager, setShowTagManager] = useState(false);
-  const [tagList, setTagList] = useState([]);
+  const [tagList, setTagList] = useState<TagInfo[]>([]);
   const [newTagName, setNewTagName] = useState('');
-  const [editingTagName, setEditingTagName] = useState(null);
+  const [editingTagName, setEditingTagName] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [deleteTagTarget, setDeleteTagTarget] = useState<string | null>(null);
+  const [renameTagTarget, setRenameTagTarget] = useState<string | null>(null);
 
   // Fetch tags directly from DB when Tag Manager is opened
   const fetchTags = async () => {
     try {
       const res = await fetch('http://localhost:5005/api/tags');
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as TagInfo[];
         setTagList(data);
       }
     } catch (err) {
@@ -47,7 +61,7 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
     }
   };
 
-  const handleRenameTag = async (oldName) => {
+  const handleRenameTag = async (oldName: string) => {
     const trimmed = editingValue.trim().replace(/^#/, '');
     if (!trimmed || oldName === trimmed) {
       setEditingTagName(null);
@@ -62,6 +76,9 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
       if (res.ok) {
         setEditingTagName(null);
         await fetchTags();
+        if (activeTag === oldName) {
+          setActiveTag(trimmed);
+        }
         if (onRefreshData) onRefreshData();
       }
     } catch (err) {
@@ -69,10 +86,7 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
     }
   };
 
-  const handleDeleteTag = async (name) => {
-    if (!window.confirm(`确定要删除标签 #${name} 吗？这会从所有关联卡片的文本中移去标签符号（保留纯文字）。`)) {
-      return;
-    }
+  const deleteTag = async (name: string) => {
     try {
       const res = await fetch(`http://localhost:5005/api/tags/${name}`, {
         method: 'DELETE'
@@ -89,10 +103,22 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
     }
   };
 
-  // Context Menu State
-  const [contextMenu, setContextMenu] = useState(null);
+  const requestDeleteTag = (name: string) => {
+    setContextMenu(null);
+    setRenameTagTarget(null);
+    setDeleteTagTarget(name);
+  };
 
-  const handleContextMenu = (e, tagName) => {
+  const requestRenameTag = (name: string) => {
+    setDeleteTagTarget(null);
+    setRenameTagTarget(name);
+    setContextMenu(null);
+  };
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tagName: string } | null>(null);
+
+  const handleContextMenu = (e: ReactMouseEvent<HTMLElement>, tagName: string) => {
     e.preventDefault();
     setContextMenu({
       x: e.clientX,
@@ -109,15 +135,9 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
     return () => window.removeEventListener('click', handleCloseMenu);
   }, [contextMenu]);
 
-  const handleContextRename = (tagName) => {
-    const newName = window.prompt(`重命名标签 #${tagName} 为：`, tagName);
-    if (newName && newName.trim() && newName.trim() !== tagName) {
-      handleRenameTagDirectly(tagName, newName.trim());
-    }
-  };
-
-  const handleRenameTagDirectly = async (oldName, newName) => {
+  const renameTag = async (oldName: string, newName: string) => {
     const trimmed = newName.replace(/^#/, '');
+    if (!trimmed || oldName === trimmed) return;
     try {
       const res = await fetch(`http://localhost:5005/api/tags/${oldName}`, {
         method: 'PUT',
@@ -125,6 +145,10 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
         body: JSON.stringify({ newName: trimmed })
       });
       if (res.ok) {
+        if (activeTag === oldName) {
+          setActiveTag(trimmed);
+        }
+        await fetchTags();
         if (onRefreshData) onRefreshData();
       }
     } catch (err) {
@@ -132,7 +156,7 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
     }
   };
 
-  const handleContextCopy = (tagName) => {
+  const handleContextCopy = (tagName: string) => {
     navigator.clipboard.writeText(`#${tagName}`).catch(err => {
       console.error('[Sidebar] Copy failed:', err);
     });
@@ -140,11 +164,11 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
 
   // Generate date cells for the contribution heatmap (past 12 weeks = 84 days)
   const renderHeatmap = () => {
-    const cells = [];
+    const cells: ReactNode[] = [];
     const today = new Date();
     
     // Create map of date string -> count for fast lookup
-    const heatmapMap = {};
+    const heatmapMap: Record<string, number> = {};
     heatmap.forEach(item => {
       heatmapMap[item.date] = item.count;
     });
@@ -175,7 +199,6 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
 
   // Get month labels to show under the heatmap
   const getMonthLabels = () => {
-    const labels = [];
     const today = new Date();
     const monthNames = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
     
@@ -299,7 +322,7 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
                 placeholder="输入标签名并回车新建..." 
                 value={newTagName}
                 onChange={(e) => setNewTagName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCreateTag()}
+                onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleCreateTag()}
               />
               <button onClick={handleCreateTag}>新建</button>
             </div>
@@ -318,7 +341,7 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
                         type="text" 
                         value={editingValue}
                         onChange={(e) => setEditingValue(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleRenameTag(tag.name)}
+                        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleRenameTag(tag.name)}
                         autoFocus
                       />
                     ) : (
@@ -336,7 +359,7 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
                       ) : (
                         <>
                           <button title="重命名" onClick={() => { setEditingTagName(tag.name); setEditingValue(tag.name); }}>✏️</button>
-                          <button title="删除标签" onClick={() => handleDeleteTag(tag.name)} className="delete-btn">🗑️</button>
+                          <button title="删除标签" onClick={() => requestDeleteTag(tag.name)} className="delete-btn">🗑️</button>
                         </>
                       )}
                     </div>
@@ -356,13 +379,13 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
         >
           <div 
             className="context-menu-item"
-            onClick={() => handleContextRename(contextMenu.tagName)}
+            onClick={() => requestRenameTag(contextMenu.tagName)}
           >
             ✏️ 重命名标签
           </div>
           <div 
             className="context-menu-item delete"
-            onClick={() => handleDeleteTag(contextMenu.tagName)}
+            onClick={() => requestDeleteTag(contextMenu.tagName)}
           >
             🗑️ 删除标签
           </div>
@@ -373,6 +396,35 @@ export default function Sidebar({ stats, activeTag, setActiveTag, noteCount, onR
             📋 复制标签名
           </div>
         </div>
+      )}
+
+      {deleteTagTarget && (
+        <ConfirmDeleteDialog
+          title={`删除标签 #${deleteTagTarget}？`}
+          description="这会从所有关联卡片的文本中移去标签符号（保留纯文字）。"
+          confirmLabel="删除标签"
+          preview={`#${deleteTagTarget}`}
+          onCancel={() => setDeleteTagTarget(null)}
+          onConfirm={() => {
+            const name = deleteTagTarget;
+            if (!name) return;
+            setDeleteTagTarget(null);
+            void deleteTag(name);
+          }}
+        />
+      )}
+
+      {renameTagTarget && (
+        <RenameTagDialog
+          tagName={renameTagTarget}
+          onCancel={() => setRenameTagTarget(null)}
+          onConfirm={(newName) => {
+            const oldName = renameTagTarget;
+            if (!oldName) return;
+            setRenameTagTarget(null);
+            void renameTag(oldName, newName);
+          }}
+        />
       )}
     </aside>
   );
