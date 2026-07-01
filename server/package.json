@@ -1,18 +1,17 @@
 {
   "name": "pi-mind-server",
   "version": "1.0.0",
-  "description": "Backend for Pi-Mind card note application",
+  "description": "Backend server for Pi-Mind card note application powered by Bun",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js"
+    "start": "bun index.js",
+    "dev": "bun --watch index.js"
   },
   "dependencies": {
-    "better-sqlite3": "^11.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "multer": "^2.2.0"
+    "multer": "^1.4.5-lts.1"
   }
 }

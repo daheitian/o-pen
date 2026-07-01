@@ -15,7 +15,7 @@ const piMinimaxPath = path.join(homeDir, '.pi/agent/bin/pi-minimax');
 // Helper: Fetch all card notes from the SQLite database to build the context prompt
 function getNotesContextMarkdown() {
   try {
-    const stmt = db.prepare('SELECT id, content, created_at FROM notes ORDER BY created_at DESC LIMIT 30');
+    const stmt = db.query('SELECT id, content, created_at FROM notes ORDER BY created_at DESC LIMIT 30');
     const rows = stmt.all();
     if (rows.length === 0) {
       return '用户目前没有任何卡片笔记。';
@@ -36,7 +36,7 @@ export async function handleAgentChat(req, res) {
   try {
     // 1. Save user message to SQLite database
     const userTime = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const saveUserStmt = db.prepare('INSERT INTO messages (role, content, created_at) VALUES (?, ?, ?)');
+    const saveUserStmt = db.query('INSERT INTO messages (role, content, created_at) VALUES (?, ?, ?)');
     saveUserStmt.run('user', message, userTime);
 
     // 2. Set headers for SSE streaming
@@ -112,7 +112,7 @@ ${notesContext}
       // 5. Save model response to database
       try {
         const modelTime = new Date().toISOString().replace('T', ' ').substring(0, 19);
-        const saveModelStmt = db.prepare('INSERT INTO messages (role, content, created_at) VALUES (?, ?, ?)');
+        const saveModelStmt = db.query('INSERT INTO messages (role, content, created_at) VALUES (?, ?, ?)');
         saveModelStmt.run('model', fullResponse, modelTime);
       } catch (err) {
         console.error('[Bridge] Failed to save agent message to DB:', err);
@@ -130,12 +130,12 @@ ${notesContext}
 }
 
 export function getAgentHistory() {
-  const stmt = db.prepare('SELECT role, content, created_at FROM messages ORDER BY id ASC');
+  const stmt = db.query('SELECT role, content, created_at FROM messages ORDER BY id ASC');
   return stmt.all();
 }
 
 export function clearAgentHistory() {
-  db.prepare('DELETE FROM messages').run();
+  db.query('DELETE FROM messages').run();
   
   // Clear conversation state history folder in python agent to reset agent memory
   const historyDir = path.resolve(__dirname, '../agent/history');

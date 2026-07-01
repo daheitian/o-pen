@@ -66,7 +66,7 @@ function extractTags(content) {
 // 1. Get all notes
 app.get('/api/notes', (req, res) => {
   try {
-    const stmt = db.prepare('SELECT * FROM notes ORDER BY created_at DESC');
+    const stmt = db.query('SELECT * FROM notes ORDER BY created_at DESC');
     const notes = stmt.all();
     // Parse tags JSON string back to array
     const parsedNotes = notes.map(note => ({
@@ -91,7 +91,7 @@ app.post('/api/notes', (req, res) => {
   try {
     // Optionally accept created_at from client for historical mock data (e.g., for heatmap testing)
     const timeStr = created_at || new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const stmt = db.prepare(`
+    const stmt = db.query(`
       INSERT INTO notes (content, tags, created_at, updated_at) 
       VALUES (?, ?, ?, ?)
     `);
@@ -122,7 +122,7 @@ app.put('/api/notes/:id', (req, res) => {
   const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
   try {
-    const stmt = db.prepare(`
+    const stmt = db.query(`
       UPDATE notes 
       SET content = ?, tags = ?, updated_at = ? 
       WHERE id = ?
@@ -146,7 +146,7 @@ app.put('/api/notes/:id', (req, res) => {
 app.delete('/api/notes/:id', (req, res) => {
   const { id } = req.params;
   try {
-    const stmt = db.prepare('DELETE FROM notes WHERE id = ?');
+    const stmt = db.query('DELETE FROM notes WHERE id = ?');
     const result = stmt.run(id);
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Note not found' });
@@ -161,11 +161,11 @@ app.delete('/api/notes/:id', (req, res) => {
 app.get('/api/stats', (req, res) => {
   try {
     // Count notes
-    const countStmt = db.prepare('SELECT COUNT(*) as count FROM notes');
+    const countStmt = db.query('SELECT COUNT(*) as count FROM notes');
     const totalNotes = countStmt.get().count;
 
     // Get unique tags and their frequency
-    const tagsStmt = db.prepare('SELECT tags FROM notes');
+    const tagsStmt = db.query('SELECT tags FROM notes');
     const allTagsRows = tagsStmt.all();
     const tagCounts = {};
     allTagsRows.forEach(row => {
@@ -181,7 +181,7 @@ app.get('/api/stats', (req, res) => {
 
     // Heatmap: Count notes per day
     // SQLite substring to get YYYY-MM-DD
-    const heatmapStmt = db.prepare(`
+    const heatmapStmt = db.query(`
       SELECT substr(created_at, 1, 10) as date, COUNT(*) as count 
       FROM notes 
       GROUP BY date 
