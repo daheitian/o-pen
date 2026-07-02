@@ -63,10 +63,10 @@ function extractTags(content) {
   return [...new Set(matches.map(m => m.slice(1)))];
 }
 
-// Helper: Extract links to other cards (e.g. [[uuid]])
+// Helper: Extract links to other cards (e.g. [[uuid]] or {{uuid}})
 function extractLinks(content) {
   if (!content) return [];
-  const linkRegex = /\[\[([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\]\]/gi;
+  const linkRegex = /(?:\[\[|\{\{)([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(?:\]\]|\}\})/gi;
   const matches = [...content.matchAll(linkRegex)];
   return [...new Set(matches.map(m => m[1].toLowerCase()))];
 }
