@@ -89,10 +89,20 @@ function updateNoteLinks(sourceId, targetIds) {
   }
 }
 
+function serializeNote(note, links = [], backlinks = []) {
+  return {
+    ...note,
+    tags: note.tags ? JSON.parse(note.tags) : [],
+    links,
+    backlinks,
+    is_pinned: Boolean(note.is_pinned)
+  };
+}
+
 // 1. Get all notes
 app.get('/api/notes', (req, res) => {
   try {
-    const stmt = db.query('SELECT * FROM notes ORDER BY created_at DESC');
+    const stmt = db.query('SELECT * FROM notes ORDER BY is_pinned DESC, created_at DESC');
     const notes = stmt.all();
     
     // Fetch all link relations in one go to avoid N+1 query performance bottleneck
@@ -114,12 +124,11 @@ app.get('/api/notes', (req, res) => {
     });
 
     // Parse tags JSON string back to array and associate links/backlinks
-    const parsedNotes = notes.map(note => ({
-      ...note,
-      tags: note.tags ? JSON.parse(note.tags) : [],
-      links: linksMap[note.id] || [],
-      backlinks: backlinksMap[note.id] || []
-    }));
+    const parsedNotes = notes.map(note => serializeNote(
+      note,
+      linksMap[note.id] || [],
+      backlinksMap[note.id] || []
+    ));
     res.json(parsedNotes);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -165,7 +174,8 @@ app.post('/api/notes', (req, res) => {
       links: finalLinks,
       backlinks: [],
       created_at: timeStr,
-      updated_at: timeStr
+      updated_at: timeStr,
+      is_pinned: false
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -206,6 +216,7 @@ app.put('/api/notes/:id', (req, res) => {
     
     const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(id).map(r => r.target_id);
     const finalBacklinks = db.query('SELECT source_id FROM note_links WHERE target_id = ?').all(id).map(r => r.source_id);
+    const currentNote = db.query('SELECT created_at, is_pinned FROM notes WHERE id = ?').get(id);
 
     res.json({
       id: id,
@@ -213,8 +224,42 @@ app.put('/api/notes/:id', (req, res) => {
       tags,
       links: finalLinks,
       backlinks: finalBacklinks,
-      updated_at: timeStr
+      created_at: currentNote.created_at,
+      updated_at: timeStr,
+      is_pinned: Boolean(currentNote.is_pinned)
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3.5. Pin or unpin a note
+app.patch('/api/notes/:id/pin', (req, res) => {
+  const { id } = req.params;
+  const { is_pinned } = req.body;
+
+  if (typeof is_pinned !== 'boolean') {
+    return res.status(400).json({ error: 'is_pinned boolean is required' });
+  }
+
+  const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+  try {
+    const stmt = db.query(`
+      UPDATE notes
+      SET is_pinned = ?, updated_at = ?
+      WHERE id = ?
+    `);
+    const result = stmt.run(is_pinned ? 1 : 0, timeStr, id);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    const note = db.query('SELECT * FROM notes WHERE id = ?').get(id);
+    const finalLinks = db.query('SELECT target_id FROM note_links WHERE source_id = ?').all(id).map(r => r.target_id);
+    const finalBacklinks = db.query('SELECT source_id FROM note_links WHERE target_id = ?').all(id).map(r => r.source_id);
+
+    res.json(serializeNote(note, finalLinks, finalBacklinks));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

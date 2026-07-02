@@ -465,6 +465,26 @@ input::placeholder {
   box-shadow: var(--shadow-lg);
 }
 
+.note-card.pinned {
+  border-color: rgba(var(--primary-rgb), 0.45);
+  box-shadow: 0 12px 28px rgba(var(--primary-rgb), 0.1), var(--shadow);
+}
+
+.note-card.pinned:hover {
+  box-shadow: 0 16px 34px rgba(var(--primary-rgb), 0.16), var(--shadow-lg);
+}
+
+.note-card.pinned::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(180deg, var(--primary-color), var(--primary-hover));
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -473,8 +493,26 @@ input::placeholder {
   margin-bottom: 10px;
 }
 
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .card-time {
   font-weight: 500;
+}
+
+.pin-badge {
+  color: var(--primary-hover);
+  background: rgba(var(--primary-rgb), 0.12);
+  border: 1px solid rgba(var(--primary-rgb), 0.25);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .card-actions {

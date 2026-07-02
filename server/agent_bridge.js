@@ -23,7 +23,7 @@ function parseTags(tags) {
 }
 
 function getNotesForSync() {
-  const notes = db.query('SELECT * FROM notes ORDER BY created_at DESC').all();
+  const notes = db.query('SELECT * FROM notes ORDER BY is_pinned DESC, created_at DESC').all();
   const allLinks = db.query('SELECT source_id, target_id FROM note_links').all();
   const linksMap = {};
   const backlinksMap = {};
@@ -40,7 +40,8 @@ function getNotesForSync() {
     ...note,
     tags: parseTags(note.tags),
     links: linksMap[note.id] || [],
-    backlinks: backlinksMap[note.id] || []
+    backlinks: backlinksMap[note.id] || [],
+    is_pinned: Boolean(note.is_pinned)
   }));
 }
 
@@ -50,6 +51,7 @@ function noteFingerprint(note) {
     note.tags,
     note.created_at,
     note.updated_at,
+    note.is_pinned,
     note.links,
     note.backlinks
   ]);

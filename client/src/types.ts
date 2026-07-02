@@ -6,6 +6,7 @@ export type Note = {
   backlinks: string[];
   created_at: string;
   updated_at?: string;
+  is_pinned: boolean;
 };
 
 export type Stats = {
