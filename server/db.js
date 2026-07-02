@@ -53,7 +53,8 @@ try {
           content TEXT NOT NULL,
           tags TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          is_pinned INTEGER DEFAULT 0
         );
 
         CREATE TABLE note_links (
@@ -66,11 +67,11 @@ try {
       `);
 
       const insertNote = db.query(`
-        INSERT INTO notes (id, content, tags, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO notes (id, content, tags, created_at, updated_at, is_pinned)
+        VALUES (?, ?, ?, ?, ?, ?)
       `);
       notes.forEach(n => {
-        insertNote.run(n.uuid, n.content, n.tags, n.created_at, n.updated_at);
+        insertNote.run(n.uuid, n.content, n.tags, n.created_at, n.updated_at, n.is_pinned ? 1 : 0);
       });
 
       const insertLink = db.query(`
@@ -99,7 +100,8 @@ db.exec(`
     content TEXT NOT NULL,
     tags TEXT, -- JSON array of tags: '["work", "idea"]'
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    is_pinned INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS messages (
@@ -122,6 +124,17 @@ db.exec(`
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+try {
+  const tableInfo = db.query("PRAGMA table_info(notes)").all();
+  const hasPinnedColumn = tableInfo.some(col => col.name === 'is_pinned');
+  if (!hasPinnedColumn) {
+    db.exec('ALTER TABLE notes ADD COLUMN is_pinned INTEGER DEFAULT 0');
+    console.log('[Database Migration] Added is_pinned column to notes table.');
+  }
+} catch (e) {
+  console.error('[Database Migration] Adding is_pinned column failed:', e.message);
+}
 
 // Seeding tags table from existing notes tags
 try {

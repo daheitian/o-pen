@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import ConfirmDeleteDialog from './ConfirmDeleteDialog';
+import NoteCardEditor from './NoteCardEditor';
 import type { Note } from '../types';
 
 type NoteFeedProps = {
@@ -14,6 +15,7 @@ type NoteFeedProps = {
   onDeleteNote: (id: string) => void;
   onMentionNote: (note: Note) => void;
   onAiAddTags: (note: Note) => void;
+  onTogglePinNote: (note: Note) => void;
 };
 
 export default function NoteFeed({ 
@@ -26,7 +28,8 @@ export default function NoteFeed({
   onUpdateNote, 
   onDeleteNote,
   onMentionNote,
-  onAiAddTags
+  onAiAddTags,
+  onTogglePinNote
 }: NoteFeedProps) {
   const [newContent, setNewContent] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -42,6 +45,7 @@ export default function NoteFeed({
   
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const noteContextMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Close suggestions on click outside
   useEffect(() => {
@@ -56,15 +60,20 @@ export default function NoteFeed({
   }, [showLinker]);
 
   useEffect(() => {
-    const closeMenu = () => setNoteContextMenu(null);
+    const closeMenu = (event: MouseEvent) => {
+      const menu = noteContextMenuRef.current;
+      if (menu && event.target instanceof Node && !menu.contains(event.target)) {
+        setNoteContextMenu(null);
+      }
+    };
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') closeMenu();
+      if (e.key === 'Escape') setNoteContextMenu(null);
     };
 
-    window.addEventListener('click', closeMenu);
+    document.addEventListener('mousedown', closeMenu);
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('click', closeMenu);
+      document.removeEventListener('mousedown', closeMenu);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
@@ -198,6 +207,11 @@ export default function NoteFeed({
   const handleStartEdit = (note: Note) => {
     setEditingId(note.id);
     setEditingContent(note.content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditingContent('');
   };
 
   const handleNoteContextMenu = (e: ReactMouseEvent<HTMLDivElement>, note: Note) => {
@@ -489,38 +503,24 @@ export default function NoteFeed({
               <div
                 key={note.id}
                 id={`note-card-${note.id}`}
-                className="note-card"
+                className={`note-card${note.is_pinned ? ' pinned' : ''}`}
                 onContextMenu={(e) => handleNoteContextMenu(e, note)}
               >
                 {editingId === note.id ? (
-                  /* Editing Mode */
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <textarea
-                      value={editingContent}
-                      onChange={(e) => setEditingContent(e.target.value)}
-                      className="card-inline-editor"
-                    />
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                      <button 
-                        onClick={() => setEditingId(null)}
-                        className="submit-btn" 
-                        style={{ backgroundColor: 'var(--text-light)' }}
-                      >
-                        取消
-                      </button>
-                      <button 
-                        onClick={() => handleSaveEdit(note.id)}
-                        className="submit-btn"
-                      >
-                        保存
-                      </button>
-                    </div>
-                  </div>
+                  <NoteCardEditor
+                    value={editingContent}
+                    onChange={setEditingContent}
+                    onCancel={handleCancelEdit}
+                    onSave={() => handleSaveEdit(note.id)}
+                  />
                 ) : (
                   /* Display Mode */
                   <>
                     <div className="card-header">
-                      <span className="card-time">{note.created_at}</span>
+                      <div className="card-meta">
+                        <span className="card-time">{note.created_at}</span>
+                        {note.is_pinned && <span className="pin-badge">置顶</span>}
+                      </div>
                     </div>
                     <div className="card-body">
                       {renderFormattedText(note.content)}
@@ -600,11 +600,21 @@ export default function NoteFeed({
 
         {noteContextMenu && (
           <div
+            ref={noteContextMenuRef}
             className="tag-context-menu note-context-menu"
             style={{ top: `${noteContextMenu.y}px`, left: `${noteContextMenu.x}px` }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
           >
+            <div
+              className="context-menu-item"
+              onClick={() => {
+                onTogglePinNote(noteContextMenu.note);
+                setNoteContextMenu(null);
+              }}
+            >
+              {noteContextMenu.note.is_pinned ? '取消置顶' : '置顶卡片'}
+            </div>
             <div
               className="context-menu-item"
               onClick={() => {

@@ -9,6 +9,11 @@ import './App.css';
 
 const API_BASE = 'http://localhost:5005/api';
 
+const sortNotes = (items: Note[]) => [...items].sort((a, b) => (
+  Number(Boolean(b.is_pinned)) - Number(Boolean(a.is_pinned)) ||
+  (b.created_at || '').localeCompare(a.created_at || '')
+));
+
 export default function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [stats, setStats] = useState<Stats>({ totalNotes: 0, totalTags: 0, tagFrequency: {}, heatmap: [] });
@@ -80,7 +85,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/notes`);
       const data = await res.json() as Note[];
-      setNotes(data);
+      setNotes(sortNotes(data));
     } catch (err) {
       console.error('Failed to fetch notes:', err);
     }
@@ -119,9 +124,7 @@ export default function App() {
 
       changedNotes.forEach(note => byId.set(note.id, note));
 
-      return [...byId.values()].sort((a, b) => (
-        (b.created_at || '').localeCompare(a.created_at || '')
-      ));
+      return sortNotes([...byId.values()]);
     });
 
     setAgentContextNotes(prev => prev
@@ -180,6 +183,23 @@ export default function App() {
       }
     } catch (err) {
       console.error('Failed to delete note:', err);
+    }
+  };
+
+  // Pin or unpin a note without refreshing the whole feed
+  const handleTogglePinNote = async (note: Note) => {
+    try {
+      const res = await fetch(`${API_BASE}/notes/${note.id}/pin`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_pinned: !note.is_pinned }),
+      });
+      if (res.ok) {
+        const updatedNote = await res.json() as Note;
+        applyNoteChanges({ notes: [updatedNote] });
+      }
+    } catch (err) {
+      console.error('Failed to toggle note pin:', err);
     }
   };
 
@@ -343,6 +363,7 @@ export default function App() {
         onDeleteNote={handleDeleteNote}
         onMentionNote={handleMentionNote}
         onAiAddTags={handleAiAddTags}
+        onTogglePinNote={handleTogglePinNote}
       />
 
       {/* Right Resizer */}
